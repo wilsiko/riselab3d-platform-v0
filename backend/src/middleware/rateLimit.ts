@@ -20,8 +20,8 @@ export function rateLimitMiddleware(req: Request, res: Response, next: NextFunct
   record.count++;
 
   if (record.count > MAX_REQUESTS) {
-    res.set('Retry-After', String(Math.ceil((record.resetTime - now) / 1000)));
-    return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+     res.set('Retry-After', String(Math.ceil((record.resetTime - now) / 1000)));
+     return res.status(429).json({ error: 'Muitas requisições. Tente novamente em instantes.' });
   }
 
   next();

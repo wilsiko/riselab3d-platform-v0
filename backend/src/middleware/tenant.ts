@@ -9,10 +9,10 @@ declare global {
 }
 
 export function tenantMiddleware(req: Request, res: Response, next: NextFunction) {
-  const tenantId = (req.header('X-Tenant-Id') || 'tenant_1').toString();
+  const tenantId = req.user?.tenantId || req.header('X-Tenant-Id')?.toString();
 
   if (!tenantId) {
-    return res.status(400).json({ error: 'Tenant ID is required in X-Tenant-Id header.' });
+     return res.status(400).json({ error: 'Não foi possível identificar a empresa desta requisição.' });
   }
 
   req.tenantId = tenantId;
