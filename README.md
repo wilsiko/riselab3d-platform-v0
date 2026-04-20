@@ -41,6 +41,8 @@ docker-compose up --build
 # Backend: http://localhost:4000
 ```
 
+Esse fluxo continua sendo o recomendado para testes locais. Os ajustes para Render usam apenas variaveis de ambiente e nao alteram o `docker-compose.yml`.
+
 ### Usando npm
 
 #### Backend
@@ -62,6 +64,43 @@ npm install
 npm run dev
 # Frontend rodando em http://localhost:5173
 ```
+
+## Render Sem Quebrar o Docker Local
+
+O projeto pode ser publicado no Render com runtime nativo de Node no backend e Static Site no frontend, mantendo o Docker apenas para testes locais.
+
+### Backend no Render
+```bash
+Root Directory: backend
+Build Command: npm install && npm run build && npx prisma generate
+Start Command: npx prisma db push && npm run start
+```
+
+Variaveis de ambiente recomendadas:
+```bash
+DATABASE_URL=<Render PostgreSQL connection string>
+PORT=10000
+JWT_SECRET=<segredo-forte>
+FRONTEND_URL=https://<seu-frontend>.onrender.com
+CORS_ORIGIN=https://<seu-frontend>.onrender.com
+```
+
+### Frontend no Render
+```bash
+Root Directory: frontend
+Build Command: npm install && npm run build
+Publish Directory: dist
+```
+
+Variaveis de ambiente recomendadas:
+```bash
+VITE_API_URL=https://<seu-backend>.onrender.com
+```
+
+### Comportamento dos ambientes
+- Local com Docker: o frontend continua usando proxy `/api` do Vite apontando para o backend do Compose.
+- Produção no Render: o frontend usa `VITE_API_URL` e o backend restringe CORS ao domínio configurado.
+- Local sem variaveis de produção: o backend segue aceitando CORS aberto para nao atrapalhar os testes.
 
 ## 📋 Endpoints Principais
 

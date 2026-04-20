@@ -1,8 +1,10 @@
 import axios from 'axios';
 import { clearSession, loadSession } from './auth';
 
+const apiBaseUrl = (import.meta.env.VITE_API_URL || '').trim().replace(/\/+$/, '');
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: apiBaseUrl ? `${apiBaseUrl}/api` : '/api',
 });
 
 api.interceptors.request.use((config) => {
