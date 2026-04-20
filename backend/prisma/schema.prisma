@@ -1,0 +1,103 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-arm64-openssl-1.1.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id      String    @id @default(uuid())
+  name    String
+  users   User[]
+  printers Printer[]
+  filaments Filament[]
+  settings GlobalSettings?
+  products Product[]
+  quotes   Quote[]
+}
+
+model User {
+  id        String @id @default(uuid())
+  tenant    Tenant @relation(fields: [tenantId], references: [id])
+  tenantId  String
+  email     String @unique
+  password  String
+}
+
+model Printer {
+  id             String   @id @default(uuid())
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+  tenantId       String
+  nome           String
+  consumo_watts  Float
+  custo_aquisicao Float
+  vida_util_horas Float
+  products       Product[]
+}
+
+model Filament {
+  id          String   @id @default(uuid())
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  tenantId    String
+  marca       String
+  tipo        String
+  custo_por_kg Float
+  products    Product[]
+}
+
+model GlobalSettings {
+  id      String  @id @default(uuid())
+  tenant   Tenant  @relation(fields: [tenantId], references: [id])
+  tenantId String  @unique
+  custo_kwh Float
+}
+
+model Product {
+  id                String      @id @default(uuid())
+  tenant            Tenant      @relation(fields: [tenantId], references: [id])
+  tenantId          String
+  nome              String
+  cor               String
+  variacao          String
+  sku               String      @unique
+  peso_gramas       Float
+  tempo_impressao_horas Float
+  custo_material    Float
+  custo_energia     Float
+  custo_amortizacao Float
+  custo_total       Float
+  printer           Printer     @relation(fields: [printerId], references: [id])
+  printerId         String
+  filament          Filament    @relation(fields: [filamentId], references: [id])
+  filamentId        String
+  quoteItems        QuoteItem[]
+
+  @@index([tenantId])
+  @@index([sku])
+}
+
+model Quote {
+  id           String      @id @default(uuid())
+  tenant       Tenant      @relation(fields: [tenantId], references: [id])
+  tenantId     String
+  nome_cliente String
+  data         DateTime
+  valor_total  Float
+  items        QuoteItem[]
+
+  @@index([tenantId])
+  @@index([data])
+}
+
+model QuoteItem {
+  id            String   @id @default(uuid())
+  quote         Quote    @relation(fields: [quoteId], references: [id])
+  quoteId       String
+  product       Product  @relation(fields: [productId], references: [id])
+  productId     String
+  quantidade    Int
+  preco_unitario Float
+}
