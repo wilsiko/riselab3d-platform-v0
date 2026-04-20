@@ -17,14 +17,37 @@ model Tenant {
   settings GlobalSettings?
   products Product[]
   quotes   Quote[]
+  feedbacks Feedback[]
 }
 
 model User {
   id        String @id @default(uuid())
   tenant    Tenant @relation(fields: [tenantId], references: [id])
   tenantId  String
+  name      String @default("")
   email     String @unique
   password  String
+  role      String @default("client")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  feedbacks Feedback[]
+}
+
+model PrinterModel {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  consumoWattsPadrao Float @default(120)
+  vidaUtilHorasPadrao Float @default(2000)
+  printers  Printer[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model ProductColor {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Printer {
@@ -32,27 +55,42 @@ model Printer {
   tenant         Tenant   @relation(fields: [tenantId], references: [id])
   tenantId       String
   nome           String
+  model          PrinterModel @relation(fields: [modelId], references: [id])
+  modelId        String
   consumo_watts  Float
   custo_aquisicao Float
   vida_util_horas Float
+  data_desativacao DateTime?
   products       Product[]
+  quoteItems     QuoteItem[]
+
+  @@index([tenantId, data_desativacao])
 }
 
 model Filament {
-  id          String   @id @default(uuid())
-  tenant      Tenant   @relation(fields: [tenantId], references: [id])
-  tenantId    String
-  marca       String
-  tipo        String
+  id           String   @id @default(uuid())
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  tenantId     String
+  marca        String
+  lote         String
+  data_compra  DateTime
+  tipo         String
   custo_por_kg Float
-  products    Product[]
+  data_desativacao DateTime?
+  products     Product[]
+
+  @@index([tenantId, data_desativacao])
 }
 
 model GlobalSettings {
-  id      String  @id @default(uuid())
-  tenant   Tenant  @relation(fields: [tenantId], references: [id])
-  tenantId String  @unique
-  custo_kwh Float
+  id                               String  @id @default(uuid())
+  tenant                           Tenant  @relation(fields: [tenantId], references: [id])
+  tenantId                         String  @unique
+  custo_kwh                        Float
+  margem_venda_direta              Float   @default(20)
+  margem_venda_ecommerce           Float   @default(35)
+  margem_venda_consumidor_final    Float   @default(50)
+  logo_data_url                    String?
 }
 
 model Product {
@@ -68,14 +106,17 @@ model Product {
   custo_material    Float
   custo_energia     Float
   custo_amortizacao Float
+  custo_adicional   Float       @default(0)
+  falha_percentual  Float       @default(10)
   custo_total       Float
-  printer           Printer     @relation(fields: [printerId], references: [id])
-  printerId         String
+  printer           Printer?    @relation(fields: [printerId], references: [id])
+  printerId         String?
   filament          Filament    @relation(fields: [filamentId], references: [id])
   filamentId        String
+  data_desativacao  DateTime?
   quoteItems        QuoteItem[]
 
-  @@index([tenantId])
+  @@index([tenantId, data_desativacao])
   @@index([sku])
 }
 
@@ -85,6 +126,9 @@ model Quote {
   tenantId     String
   nome_cliente String
   data         DateTime
+  tipo_venda   String
+  valor_custo  Float
+  margem_percentual Float
   valor_total  Float
   items        QuoteItem[]
 
@@ -98,6 +142,23 @@ model QuoteItem {
   quoteId       String
   product       Product  @relation(fields: [productId], references: [id])
   productId     String
+  printer       Printer? @relation(fields: [printerId], references: [id])
+  printerId     String?
   quantidade    Int
   preco_unitario Float
+}
+
+model Feedback {
+  id        String   @id @default(uuid())
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  tenantId  String
+  user      User?    @relation(fields: [userId], references: [id])
+  userId    String?
+  category  String
+  subject   String
+  message   String
+  status    String   @default("novo")
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, createdAt])
 }

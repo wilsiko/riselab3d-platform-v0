@@ -16,3 +16,22 @@ select,
 textarea {
   @apply border border-slate-200 bg-white text-slate-900;
 }
+
+@layer components {
+  .form-control {
+    @apply min-h-12 w-full rounded-2xl border-slate-200 bg-white px-3 py-3;
+  }
+
+  select.form-control,
+  select.form-control-strong {
+    @apply h-14 min-h-14 appearance-none rounded-2xl py-0 pr-10;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23475569' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 8 4 4 4-4'/%3E%3C/svg%3E");
+    background-position: right 0.875rem center;
+    background-repeat: no-repeat;
+    background-size: 1rem;
+  }
+
+  .form-control-strong {
+    @apply form-control border outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-500/10;
+  }
+}
