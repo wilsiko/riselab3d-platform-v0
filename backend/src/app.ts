@@ -18,9 +18,11 @@ import feedbackRouter from './routes/feedback';
 
 dotenv.config();
 
+const normalizeOrigin = (value: string) => value.trim().replace(/\/+$/, '').toLowerCase();
+
 const allowedOrigins = [process.env.CORS_ORIGIN, process.env.FRONTEND_URL]
   .flatMap((value) => (value ? value.split(',') : []))
-  .map((origin) => origin.trim())
+  .map((origin) => normalizeOrigin(origin))
   .filter(Boolean);
 
 const app = express();
@@ -29,11 +31,18 @@ app.use(
     allowedOrigins.length
       ? {
           origin(origin, callback) {
-            if (!origin || allowedOrigins.includes(origin)) {
+            if (!origin) {
               return callback(null, true);
             }
 
-            return callback(new Error('Origem nao permitida pelo servidor.'));
+            const normalizedOrigin = normalizeOrigin(origin);
+
+            if (allowedOrigins.includes(normalizedOrigin)) {
+              return callback(null, true);
+            }
+
+            console.warn(`Blocked CORS origin: ${origin}`);
+            return callback(null, false);
           },
         }
       : undefined,
