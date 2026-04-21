@@ -9,8 +9,8 @@ interface LoginProps {
 export default function Login({ onAuthenticated }: LoginProps) {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [name, setName] = useState('');
-  const [email, setEmail] = useState('admin@riselab3d.com.br');
-  const [password, setPassword] = useState('RiseLab@16');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPasswords, setShowPasswords] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
