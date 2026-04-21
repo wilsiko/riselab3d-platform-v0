@@ -14,7 +14,12 @@ export interface AuthSession {
 }
 
 const AUTH_STORAGE_KEY = 'riselab3d.auth';
+const WELCOME_GUIDE_STORAGE_PREFIX = 'riselab3d.welcome-guide.dismissed';
 const PLATFORM_ADMIN_EMAIL = 'admin@riselab3d.com.br';
+
+function getWelcomeGuideStorageKey(user: SessionUser) {
+  return `${WELCOME_GUIDE_STORAGE_PREFIX}:${user.id || user.email.trim().toLowerCase()}`;
+}
 
 function normalizeSession(session: AuthSession): AuthSession {
   const normalizedRole = session.user.role ?? (session.user.isPlatformAdmin || session.user.email.trim().toLowerCase() === PLATFORM_ADMIN_EMAIL ? 'platform_admin' : 'client');
@@ -55,4 +60,16 @@ export function saveSession(session: AuthSession) {
 
 export function clearSession() {
   window.localStorage.removeItem(AUTH_STORAGE_KEY);
+}
+
+export function shouldShowWelcomeGuide(session: AuthSession): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return window.localStorage.getItem(getWelcomeGuideStorageKey(session.user)) !== '1';
+}
+
+export function dismissWelcomeGuide(session: AuthSession) {
+  window.localStorage.setItem(getWelcomeGuideStorageKey(session.user), '1');
 }

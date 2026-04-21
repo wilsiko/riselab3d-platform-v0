@@ -64,7 +64,7 @@ export default function Help() {
     <div>
       <Loading isLoading={isLoading} label="Enviando seu feedback..." />
 
-      <div className="rounded-[28px] border border-amber-200 bg-[linear-gradient(135deg,rgba(254,243,199,0.8),rgba(255,255,255,0.95))] p-8 shadow-sm">
+      <div className="help-feedback-hero rounded-[28px] border border-amber-200 bg-[linear-gradient(135deg,rgba(254,243,199,0.8),rgba(255,255,255,0.95))] p-8 shadow-sm">
         <div className="max-w-3xl">
           <p className="text-sm font-semibold uppercase tracking-[0.24em] text-amber-700">Ajuda e feedback</p>
           <h1 className="mt-4 text-3xl font-semibold text-slate-900 xl:text-4xl">Seu olhar ajuda a melhorar a plataforma.</h1>
@@ -80,7 +80,7 @@ export default function Help() {
             { title: 'Tire dúvidas', text: 'Se algo não estiver claro, envie sua pergunta direto por aqui.' },
             { title: 'Melhore a experiência', text: 'Se algum passo parecer lento ou confuso, queremos saber.' },
           ].map((item) => (
-            <div key={item.title} className="rounded-3xl border border-white/70 bg-white/80 p-5">
+            <div key={item.title} className="help-feedback-hero-card rounded-3xl border border-white/70 bg-white/80 p-5">
               <p className="text-base font-semibold text-slate-900">{item.title}</p>
               <p className="mt-2 text-sm leading-6 text-slate-600">{item.text}</p>
             </div>
