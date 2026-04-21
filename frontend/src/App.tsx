@@ -14,6 +14,8 @@ import Help from './pages/Help';
 import WelcomeGuideModal from './components/WelcomeGuideModal';
 import { AuthSession, clearSession, dismissWelcomeGuide, loadSession, saveSession, shouldShowWelcomeGuide } from './auth';
 
+const THEME_STORAGE_KEY = 'riselab3d.theme';
+
 const primaryNavItems = [
   { label: 'Produtos', path: '/products' },
   { label: 'Orçamentos', path: '/quotes' },
@@ -37,6 +39,13 @@ const adminNavItems = [
 function App() {
   const [session, setSession] = useState<AuthSession | null>(() => loadSession());
   const [showWelcomeGuide, setShowWelcomeGuide] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+
+    return window.localStorage.getItem(THEME_STORAGE_KEY) === 'dark';
+  });
   const navigate = useNavigate();
   const isClientUser = session?.user.role === 'client';
 
@@ -61,6 +70,14 @@ function App() {
     setShowWelcomeGuide(shouldShowWelcomeGuide(session));
   }, [session]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.localStorage.setItem(THEME_STORAGE_KEY, isDarkMode ? 'dark' : 'light');
+  }, [isDarkMode]);
+
   function handleAuthenticated(nextSession: AuthSession) {
     saveSession(nextSession);
     setSession(nextSession);
@@ -79,6 +96,10 @@ function App() {
     }
 
     setShowWelcomeGuide(false);
+  }
+
+  function handleToggleTheme() {
+    setIsDarkMode((currentValue) => !currentValue);
   }
 
   function navItemClass(isActive: boolean, variant: 'primary' | 'default' | 'parameter' = 'default') {
@@ -104,15 +125,25 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
+    <div className={`min-h-screen bg-slate-50 text-slate-900 ${isDarkMode ? 'theme-dark' : ''}`}>
       {session && showWelcomeGuide ? (
         <WelcomeGuideModal userName={session.user.name} onClose={handleCloseWelcomeGuide} />
       ) : null}
       <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[280px_1fr]">
         <aside className="border-r border-slate-200 bg-white px-6 py-8">
-          <div className="mb-8">
-            <div className="text-2xl font-semibold text-slate-900">RiseLab3D</div>
-            <p className="mt-2 text-sm text-slate-500">Gestão SaaS para impressão 3D</p>
+          <div className="mb-8 flex items-start justify-between gap-4">
+            <div>
+              <div className="text-2xl font-semibold text-slate-900">RiseLab3D</div>
+              <p className="mt-2 text-sm text-slate-500">Gestão SaaS para impressão 3D</p>
+            </div>
+            <button
+              type="button"
+              onClick={handleToggleTheme}
+              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-700 transition hover:bg-slate-100"
+              aria-label={isDarkMode ? 'Ativar modo claro' : 'Ativar modo escuro'}
+            >
+              {isDarkMode ? 'Light' : 'Dark'}
+            </button>
           </div>
           <div className="mb-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Sessao</p>
