@@ -11,7 +11,8 @@ import Settings from './pages/Settings';
 import Products from './pages/Products';
 import Quotes from './pages/Quotes';
 import Help from './pages/Help';
-import { AuthSession, clearSession, loadSession, saveSession } from './auth';
+import WelcomeGuideModal from './components/WelcomeGuideModal';
+import { AuthSession, clearSession, dismissWelcomeGuide, loadSession, saveSession, shouldShowWelcomeGuide } from './auth';
 
 const primaryNavItems = [
   { label: 'Produtos', path: '/products' },
@@ -35,6 +36,7 @@ const adminNavItems = [
 
 function App() {
   const [session, setSession] = useState<AuthSession | null>(() => loadSession());
+  const [showWelcomeGuide, setShowWelcomeGuide] = useState(false);
   const navigate = useNavigate();
   const isClientUser = session?.user.role === 'client';
 
@@ -50,6 +52,15 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!session || session.user.isPlatformAdmin) {
+      setShowWelcomeGuide(false);
+      return;
+    }
+
+    setShowWelcomeGuide(shouldShowWelcomeGuide(session));
+  }, [session]);
+
   function handleAuthenticated(nextSession: AuthSession) {
     saveSession(nextSession);
     setSession(nextSession);
@@ -60,6 +71,14 @@ function App() {
     clearSession();
     setSession(null);
     navigate('/');
+  }
+
+  function handleCloseWelcomeGuide(dontShowAgain: boolean) {
+    if (session && dontShowAgain) {
+      dismissWelcomeGuide(session);
+    }
+
+    setShowWelcomeGuide(false);
   }
 
   function navItemClass(isActive: boolean, variant: 'primary' | 'default' | 'parameter' = 'default') {
@@ -86,6 +105,9 @@ function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
+      {session && showWelcomeGuide ? (
+        <WelcomeGuideModal userName={session.user.name} onClose={handleCloseWelcomeGuide} />
+      ) : null}
       <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[280px_1fr]">
         <aside className="border-r border-slate-200 bg-white px-6 py-8">
           <div className="mb-8">
