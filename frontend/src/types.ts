@@ -40,6 +40,20 @@ export interface Quote {
   id: string;
   nome_cliente: string;
   data: string;
+  notes?: string | null;
+  sale_channel?: string;
+  subtotal_custo?: number;
+  margem_percentual?: number;
   valor_total: number;
-  items: Array<{ product: Product; quantidade: number; preco_unitario: number }>;
+  items: Array<{
+    product: Product;
+    quantidade: number;
+    preco_unitario: number;
+    snapshot_nome?: string | null;
+    snapshot_sku?: string | null;
+    snapshot_material?: string | null;
+    custo_base_unitario?: number | null;
+    subtotal_custo?: number | null;
+    subtotal_preco?: number | null;
+  }>;
 }

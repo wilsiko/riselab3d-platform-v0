@@ -85,7 +85,13 @@ model Quote {
   tenantId     String
   nome_cliente String
   data         DateTime
+  notes        String?
+  sale_channel String      @default("direct")
+  subtotal_custo Float     @default(0)
+  margem_percentual Float  @default(0)
   valor_total  Float
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @default(now()) @updatedAt
   items        QuoteItem[]
 
   @@index([tenantId])
@@ -100,4 +106,10 @@ model QuoteItem {
   productId     String
   quantidade    Int
   preco_unitario Float
+  snapshot_nome String?
+  snapshot_sku  String?
+  snapshot_material String?
+  custo_base_unitario Float?
+  subtotal_custo Float?
+  subtotal_preco Float?
 }

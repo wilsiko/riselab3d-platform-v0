@@ -5,6 +5,12 @@ import { withFallback, mockData } from '../utils/dbFallback';
 
 const router = Router();
 
+const SALE_CHANNEL_LABELS: Record<string, string> = {
+  direct: 'Venda direta',
+  ecommerce: 'E-commerce',
+  end_customer: 'Usuario final',
+};
+
 router.get('/', async (req, res) => {
   const quotes = await withFallback(
     () =>
@@ -19,20 +25,39 @@ router.get('/', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { nome_cliente, data, items } = req.body;
+  const { nome_cliente, data, items, notes, sale_channel, subtotal_custo, margem_percentual } = req.body;
+
+  const normalizedSaleChannel = typeof sale_channel === 'string' && sale_channel.trim() ? sale_channel : 'direct';
+  const normalizedMargin = Number.isFinite(Number(margem_percentual)) ? Number(margem_percentual) : 0;
 
   const quoteItems = await Promise.all(
     items.map(async (item: any) => {
-      const product = await prisma.product.findFirst({ where: { id: item.productId, tenantId: req.tenantId } });
+      const product = await prisma.product.findFirst({
+        where: { id: item.productId, tenantId: req.tenantId },
+        include: { filament: true },
+      });
       if (!product) throw new Error('Product not found: ' + item.productId);
+
+      const quantidade = Number(item.quantidade);
+      const precoUnitario = Number(item.preco_unitario ?? product.custo_total);
+      const subtotalCusto = product.custo_total * quantidade;
+      const subtotalPreco = precoUnitario * quantidade;
+
       return {
         productId: item.productId,
-        quantidade: Number(item.quantidade),
-        preco_unitario: Number(item.preco_unitario ?? product.custo_total),
+        quantidade,
+        preco_unitario: precoUnitario,
+        snapshot_nome: product.nome,
+        snapshot_sku: product.sku,
+        snapshot_material: `${product.filament.marca} ${product.filament.tipo}`,
+        custo_base_unitario: product.custo_total,
+        subtotal_custo: subtotalCusto,
+        subtotal_preco: subtotalPreco,
       };
     }),
   );
 
+  const subtotalCalculado = quoteItems.reduce((sum, item) => sum + (item.subtotal_custo || 0), 0);
   const valor_total = quoteItems.reduce((sum, item) => sum + item.quantidade * item.preco_unitario, 0);
 
   const quote = await prisma.quote.create({
@@ -40,6 +65,10 @@ router.post('/', async (req, res) => {
       tenantId: req.tenantId,
       nome_cliente,
       data: new Date(data),
+      notes: typeof notes === 'string' ? notes : null,
+      sale_channel: normalizedSaleChannel,
+      subtotal_custo: Number.isFinite(Number(subtotal_custo)) ? Number(subtotal_custo) : subtotalCalculado,
+      margem_percentual: normalizedMargin,
       valor_total,
       items: {
         create: quoteItems,
@@ -71,7 +100,14 @@ router.get('/:id/pdf', async (req, res) => {
   doc.fontSize(12).fillColor('#374151').text('Orçamento Profissional', { continued: true }).text(` • ${quote.nome_cliente}`, { align: 'right' });
   doc.moveDown();
   doc.fontSize(10).text(`Data: ${quote.data.toISOString().substring(0, 10)}`);
+  doc.text(`Canal: ${SALE_CHANNEL_LABELS[quote.sale_channel] || quote.sale_channel}`);
+  doc.text(`Custo base: R$ ${quote.subtotal_custo.toFixed(2)}`);
+  doc.text(`Margem aplicada: ${quote.margem_percentual.toFixed(2)}%`);
   doc.text(`Total: R$ ${quote.valor_total.toFixed(2)}`);
+  if (quote.notes) {
+    doc.moveDown(0.5);
+    doc.text(`Observacoes: ${quote.notes}`);
+  }
   doc.moveDown(1);
 
   doc.fontSize(11).text('Itens', { underline: true });
@@ -87,10 +123,10 @@ router.get('/:id/pdf', async (req, res) => {
 
   quote.items.forEach((item, index) => {
     const y = tableTop + 20 + index * 20;
-    doc.text(item.product.sku, 40, y, { width: 200 });
+    doc.text(item.snapshot_sku || item.product.sku, 40, y, { width: 200 });
     doc.text(String(item.quantidade), 260, y, { width: 50, align: 'right' });
     doc.text(`R$ ${item.preco_unitario.toFixed(2)}`, 330, y, { width: 80, align: 'right' });
-    doc.text(`R$ ${(item.preco_unitario * item.quantidade).toFixed(2)}`, 420, y, { width: 90, align: 'right' });
+    doc.text(`R$ ${(item.subtotal_preco ?? item.preco_unitario * item.quantidade).toFixed(2)}`, 420, y, { width: 90, align: 'right' });
   });
 
   doc.moveDown(quote.items.length + 2);
