@@ -1,18 +1,16 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../api';
 import { Alert } from '../components/Alert';
 import { Loading } from '../components/Loading';
+import { NumericInput } from '../components/NumericInput';
+import { PercentageField } from '../components/PercentageField';
+import { PricingCard } from '../components/PricingCard';
+import { PrinterSelector } from '../components/PrinterSelector';
 import { getSaleChannel, SALE_CHANNELS, SaleChannel } from '../constants/pricing';
-import { Product, Quote } from '../types';
+import { Filament, Printer, Quote, Settings } from '../types';
 
 const QUOTE_DRAFT_STORAGE_KEY = 'riselab3d.quote-draft';
-
-type QuoteStep = 0 | 1 | 2 | 3;
-
-interface DraftItem {
-  productId: string;
-  quantity: number;
-}
 
 interface QuoteDraft {
   clientName: string;
@@ -21,15 +19,15 @@ interface QuoteDraft {
   saleChannel: SaleChannel;
   customMarginEnabled: boolean;
   customMargin: string;
-  items: DraftItem[];
+  printerId: string;
+  materialWeightGrams: string;
+  printHours: string;
+  quantity: string;
+  laborCost: string;
+  packagingCost: string;
+  energyAdjustment: string;
+  feesPercent: string;
 }
-
-const steps = [
-  { id: 0, eyebrow: 'Passo 1', title: 'Cliente', description: 'Defina para quem o orcamento sera montado.' },
-  { id: 1, eyebrow: 'Passo 2', title: 'Itens', description: 'Escolha os produtos que entram na proposta e ajuste a quantidade.' },
-  { id: 2, eyebrow: 'Passo 3', title: 'Canal de venda', description: 'Aplique o preset comercial certo e ajuste so se realmente precisar.' },
-  { id: 3, eyebrow: 'Passo 4', title: 'Revisao', description: 'Confira o preco final, salve e exporte PDF apenas se fizer sentido.' },
-] as const;
 
 function getDefaultDraft(): QuoteDraft {
   return {
@@ -39,7 +37,14 @@ function getDefaultDraft(): QuoteDraft {
     saleChannel: 'direct',
     customMarginEnabled: false,
     customMargin: '',
-    items: [{ productId: '', quantity: 1 }],
+    printerId: '',
+    materialWeightGrams: '',
+    printHours: '',
+    quantity: '1',
+    laborCost: '0',
+    packagingCost: '0',
+    energyAdjustment: '0',
+    feesPercent: '0',
   };
 }
 
@@ -48,18 +53,17 @@ function loadDraft(): QuoteDraft {
     return getDefaultDraft();
   }
 
-  const rawValue = window.localStorage.getItem(QUOTE_DRAFT_STORAGE_KEY);
+  const storedValue = window.localStorage.getItem(QUOTE_DRAFT_STORAGE_KEY);
 
-  if (!rawValue) {
+  if (!storedValue) {
     return getDefaultDraft();
   }
 
   try {
-    const parsed = JSON.parse(rawValue) as Partial<QuoteDraft>;
+    const parsed = JSON.parse(storedValue) as Partial<QuoteDraft>;
     return {
       ...getDefaultDraft(),
       ...parsed,
-      items: parsed.items?.length ? parsed.items : [{ productId: '', quantity: 1 }],
     };
   } catch {
     return getDefaultDraft();
@@ -70,12 +74,28 @@ function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 }
 
+function formatHours(value: number) {
+  return `${value.toFixed(1)} h`;
+}
+
+function parseDecimal(value: string) {
+  const parsedValue = Number(value);
+  return Number.isFinite(parsedValue) ? parsedValue : 0;
+}
+
+function roundCurrency(value: number) {
+  return Number(value.toFixed(2));
+}
+
 export default function Quotes() {
-  const [products, setProducts] = useState<Product[]>([]);
   const [quotes, setQuotes] = useState<Quote[]>([]);
+  const [printers, setPrinters] = useState<Printer[]>([]);
+  const [materials, setMaterials] = useState<Filament[]>([]);
+  const [settings, setSettings] = useState<Settings>({ custo_kwh: 0 });
   const [draft, setDraft] = useState<QuoteDraft>(() => loadDraft());
-  const [currentStep, setCurrentStep] = useState<QuoteStep>(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [showAdvancedCosts, setShowAdvancedCosts] = useState(false);
+  const [lastSavedQuoteId, setLastSavedQuoteId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -83,14 +103,19 @@ export default function Quotes() {
     const loadData = async () => {
       try {
         setIsLoading(true);
-        const [productsRes, quotesRes] = await Promise.all([
-          api.get<Product[]>('/products'),
+        const [settingsRes, quotesRes, printersRes, filamentsRes] = await Promise.all([
+          api.get<Settings>('/settings'),
           api.get<Quote[]>('/quotes'),
+          api.get<Printer[]>('/printers'),
+          api.get<Filament[]>('/filaments'),
         ]);
-        setProducts(productsRes.data);
+
+        setSettings(settingsRes.data);
         setQuotes(quotesRes.data);
+        setPrinters(printersRes.data);
+        setMaterials(filamentsRes.data);
       } catch (requestError: any) {
-        setError(requestError?.response?.data?.error || 'Nao foi possivel carregar os orcamentos.');
+        setError(requestError?.response?.data?.error || 'Nao foi possivel carregar o espaco de cotacoes.');
       } finally {
         setIsLoading(false);
       }
@@ -108,67 +133,50 @@ export default function Quotes() {
   }, [draft]);
 
   const selectedChannel = getSaleChannel(draft.saleChannel);
-  const appliedMargin = draft.customMarginEnabled ? Number(draft.customMargin || 0) : selectedChannel.marginPercent;
+  const selectedPrinter = printers.find((printer) => printer.id === draft.printerId) || null;
+  const defaultMaterial = materials[0] || null;
+  const materialWeightGrams = parseDecimal(draft.materialWeightGrams);
+  const printHours = parseDecimal(draft.printHours);
+  const quantity = Math.max(1, Math.round(parseDecimal(draft.quantity) || 1));
+  const appliedMargin = draft.customMarginEnabled ? parseDecimal(draft.customMargin) : selectedChannel.marginPercent;
+  const feesPercent = parseDecimal(draft.feesPercent);
+  const laborCost = parseDecimal(draft.laborCost);
+  const packagingCost = parseDecimal(draft.packagingCost);
+  const energyAdjustment = parseDecimal(draft.energyAdjustment);
+  const additionalOperationalCost = laborCost + packagingCost + energyAdjustment;
 
-  const enrichedItems = useMemo(
-    () =>
-      draft.items.map((item) => {
-        const product = products.find((entry) => entry.id === item.productId) || null;
-        const unitCost = product?.custo_total || 0;
-        const unitPrice = unitCost * (1 + appliedMargin / 100);
-        return {
-          ...item,
-          product,
-          unitCost,
-          unitPrice,
-          subtotalCost: unitCost * item.quantity,
-          subtotalPrice: unitPrice * item.quantity,
-        };
-      }),
-    [draft.items, products, appliedMargin],
-  );
+  const unitTechnicalCost = useMemo(() => {
+    if (!selectedPrinter || !defaultMaterial || materialWeightGrams <= 0 || printHours <= 0) {
+      return 0;
+    }
 
-  const totalCost = enrichedItems.reduce((sum, item) => sum + item.subtotalCost, 0);
-  const totalPrice = enrichedItems.reduce((sum, item) => sum + item.subtotalPrice, 0);
-  const allItemsSelected = enrichedItems.every((item) => item.product);
-  const canAdvanceFromClient = Boolean(draft.clientName.trim());
-  const canAdvanceFromItems = Boolean(enrichedItems.length) && allItemsSelected;
-  const canAdvanceFromPricing = appliedMargin >= 0;
-  const canSubmit = canAdvanceFromClient && canAdvanceFromItems && canAdvanceFromPricing;
+    const materialCost = (materialWeightGrams / 1000) * defaultMaterial.custo_por_kg;
+    const energyCost = (selectedPrinter.consumo_watts / 1000) * printHours * settings.custo_kwh;
+    const amortizationCost = (selectedPrinter.custo_aquisicao / selectedPrinter.vida_util_horas) * printHours;
+    return materialCost + energyCost + amortizationCost;
+  }, [defaultMaterial, materialWeightGrams, printHours, selectedPrinter, settings.custo_kwh]);
 
-  const recentProducts = products.slice(0, 5);
-  const recentQuotes = quotes.slice(0, 6);
+  const totalItemCost = unitTechnicalCost * quantity;
+  const totalPrintHours = printHours * quantity;
+  const totalQuantity = quantity;
+  const productionCost = totalItemCost + additionalOperationalCost;
+  const subtotalBeforeFees = productionCost * (1 + appliedMargin / 100);
+  const feeAmount = subtotalBeforeFees * (feesPercent / 100);
+  const suggestedPrice = roundCurrency(subtotalBeforeFees + feeAmount);
+  const netProfit = roundCurrency(suggestedPrice - productionCost - feeAmount);
+  const averageUnitPrice = totalQuantity ? suggestedPrice / totalQuantity : 0;
+  const recentQuotes = quotes.slice(0, 4);
+  const canSubmit = Boolean(draft.clientName.trim()) && Boolean(draft.date) && Boolean(draft.printerId) && materialWeightGrams > 0 && printHours > 0 && quantity > 0 && suggestedPrice > 0 && Boolean(defaultMaterial);
 
   function updateDraft(partial: Partial<QuoteDraft>) {
     setDraft((currentDraft) => ({ ...currentDraft, ...partial }));
   }
 
-  function updateItem(index: number, partial: Partial<DraftItem>) {
-    setDraft((currentDraft) => ({
-      ...currentDraft,
-      items: currentDraft.items.map((item, itemIndex) => (itemIndex === index ? { ...item, ...partial } : item)),
-    }));
-  }
-
-  function addItem(productId = '') {
-    setDraft((currentDraft) => ({
-      ...currentDraft,
-      items: [...currentDraft.items, { productId, quantity: 1 }],
-    }));
-  }
-
-  function removeItem(index: number) {
-    setDraft((currentDraft) => ({
-      ...currentDraft,
-      items: currentDraft.items.length === 1 ? [{ productId: '', quantity: 1 }] : currentDraft.items.filter((_, itemIndex) => itemIndex !== index),
-    }));
-  }
-
   function clearDraft() {
-    const nextDraft = getDefaultDraft();
-    setDraft(nextDraft);
-    setCurrentStep(0);
+    setDraft(getDefaultDraft());
+    setLastSavedQuoteId(null);
     setSuccess(null);
+    setError(null);
 
     if (typeof window !== 'undefined') {
       window.localStorage.removeItem(QUOTE_DRAFT_STORAGE_KEY);
@@ -176,27 +184,52 @@ export default function Quotes() {
     }
   }
 
-  function continueToNextStep() {
-    setCurrentStep((current) => (current >= 3 ? 3 : ((current + 1) as QuoteStep)));
+  function applyQuantityPreset(nextQuantity: number) {
+    updateDraft({ quantity: String(nextQuantity) });
   }
 
-  function goToPreviousStep() {
-    setCurrentStep((current) => (current <= 0 ? 0 : ((current - 1) as QuoteStep)));
+  function extractManualMetadata(notes?: string | null) {
+    const match = notes?.match(/__RL3D_MANUAL__(\{.*\})/);
+    if (!match) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(match[1]) as {
+        printerId?: string;
+        materialWeightGrams?: number;
+        printHours?: number;
+        quantity?: number;
+      };
+    } catch {
+      return null;
+    }
   }
 
   function duplicateQuote(quote: Quote) {
+    const firstItem = quote.items[0];
+    const manualMetadata = extractManualMetadata(quote.notes);
+    const firstItemProduct = firstItem?.product;
+
     setDraft({
       ...getDefaultDraft(),
       clientName: quote.nome_cliente,
-      items: quote.items.map((item) => ({ productId: item.product.id, quantity: item.quantidade })),
+      saleChannel: (quote.sale_channel as SaleChannel) || 'direct',
+      printerId: manualMetadata?.printerId || firstItemProduct?.printer.id || '',
+      materialWeightGrams: manualMetadata?.materialWeightGrams ? String(manualMetadata.materialWeightGrams) : firstItemProduct?.peso_gramas ? String(firstItemProduct.peso_gramas) : '',
+      printHours: manualMetadata?.printHours ? String(manualMetadata.printHours) : firstItemProduct?.tempo_impressao_horas ? String(firstItemProduct.tempo_impressao_horas) : '',
+      quantity: manualMetadata?.quantity ? String(manualMetadata.quantity) : firstItem?.quantidade ? String(firstItem.quantidade) : '1',
     });
-    setCurrentStep(1);
-    setSuccess('Rascunho montado a partir de um orcamento anterior. Ajuste os detalhes e siga.');
+    setSuccess('Rascunho duplicado a partir do historico. Ajuste so o necessario e salve novamente.');
     setError(null);
+  }
 
-    if (typeof window !== 'undefined') {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+  function handleExportPdf(quoteId: string | null) {
+    if (!quoteId || typeof window === 'undefined') {
+      return;
     }
+
+    window.open(`/api/quotes/${quoteId}/pdf`, '_blank', 'noopener,noreferrer');
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -205,31 +238,60 @@ export default function Quotes() {
     setSuccess(null);
 
     if (!canSubmit) {
-      setError('Preencha as etapas obrigatorias antes de salvar o orcamento.');
+      setError('Defina cliente, itens validos e um preco final antes de salvar a cotacao.');
       return;
     }
 
+    const marginMultiplier = 1 + appliedMargin / 100;
+    const feeMultiplier = 1 + feesPercent / 100;
+    const targetTotal = roundCurrency((totalItemCost + additionalOperationalCost) * marginMultiplier * feeMultiplier);
+    const unitPrice = Number((targetTotal / quantity).toFixed(4));
+    const payloadItems = [
+      {
+        printerId: draft.printerId,
+        materialWeightGrams,
+        printHours,
+        quantidade: quantity,
+        preco_unitario: unitPrice,
+      },
+    ];
+
+    const manualMetadata = {
+      printerId: draft.printerId,
+      materialWeightGrams,
+      printHours,
+      quantity,
+    };
+
+    const contextNotes = [
+      draft.notes.trim() || null,
+      `Contexto comercial: canal ${selectedChannel.label}; mao de obra ${formatCurrency(laborCost)}; embalagem ${formatCurrency(packagingCost)}; energia extra ${formatCurrency(energyAdjustment)}; taxas ${feesPercent.toFixed(1)}%.`,
+      `__RL3D_MANUAL__${JSON.stringify(manualMetadata)}`,
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+
     try {
       setIsLoading(true);
-      const payload = {
+      const response = await api.post<Quote>('/quotes', {
         nome_cliente: draft.clientName,
         data: draft.date,
-        notes: draft.notes,
+        notes: contextNotes,
         sale_channel: draft.saleChannel,
-        subtotal_custo: Number(totalCost.toFixed(2)),
+        subtotal_custo: roundCurrency(productionCost),
         margem_percentual: Number(appliedMargin.toFixed(2)),
-        items: enrichedItems.map((item) => ({
-          productId: item.productId,
-          quantidade: item.quantity,
-          preco_unitario: Number(item.unitPrice.toFixed(2)),
-        })),
-      };
-      const response = await api.post<Quote>('/quotes', payload);
+        items: payloadItems,
+      });
+
       setQuotes((currentQuotes) => [response.data, ...currentQuotes]);
-      clearDraft();
-      setSuccess('Orcamento salvo. Ele ja fica disponivel na tela; PDF e apenas uma opcao adicional.');
+      setLastSavedQuoteId(response.data.id);
+      setSuccess('Cotacao salva com o novo resumo comercial. O PDF pode ser exportado em seguida.');
+      setDraft((currentDraft) => ({
+        ...getDefaultDraft(),
+        printerId: currentDraft.printerId,
+      }));
     } catch (requestError: any) {
-      setError(requestError?.response?.data?.error || 'Nao foi possivel salvar o orcamento.');
+      setError(requestError?.response?.data?.error || 'Nao foi possivel salvar a cotacao.');
     } finally {
       setIsLoading(false);
     }
@@ -237,420 +299,355 @@ export default function Quotes() {
 
   return (
     <div className="space-y-8">
-      <Loading isLoading={isLoading} label="Processando seu fluxo de cotacao..." />
+      <Loading isLoading={isLoading} label="Atualizando o cockpit comercial..." />
 
-      <section className="rounded-[32px] border border-slate-200 bg-white p-8 shadow-sm">
-        <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
-          <div className="max-w-3xl">
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-700">Quote flow</p>
-            <h1 className="mt-4 text-4xl font-semibold tracking-tight text-slate-900">Menos cadastro no caminho. Mais clareza para fechar o preco.</h1>
-            <p className="mt-4 text-base leading-7 text-slate-600">
-              O orcamento agora nasce em etapas curtas: cliente, itens, contexto comercial e revisao final. O PDF virou uma opcao, nao a razao do fluxo.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={clearDraft}
-            className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-          >
-            Limpar rascunho
-          </button>
+      <section className="rounded-[34px] border border-white/10 bg-[linear-gradient(135deg,rgba(8,14,30,0.98),rgba(14,31,58,0.92),rgba(8,145,178,0.18))] p-6 shadow-[0_28px_90px_rgba(0,0,0,0.28)] sm:p-8">
+        <div className="max-w-3xl">
+          <h1 className="text-4xl font-semibold tracking-[-0.05em] text-white">Cotacao modular, leitura financeira imediata e sensacao real de produto.</h1>
+          <p className="mt-4 text-sm leading-7 text-slate-300">
+            Informe a base tecnica minima da impressao e ajuste a camada comercial apenas quando necessario. A mesa precisa resolver a cotacao com poucos passos.
+          </p>
         </div>
       </section>
 
       {error ? <Alert type="error" message={error} onClose={() => setError(null)} /> : null}
       {success ? <Alert type="success" message={success} onClose={() => setSuccess(null)} /> : null}
 
-      <div className="grid gap-8 xl:grid-cols-[1.15fr_0.85fr]">
-        <form onSubmit={handleSubmit} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex flex-wrap gap-3">
-            {steps.map((step) => {
-              const isActive = currentStep === step.id;
-              const isCompleted = currentStep > step.id;
+      <form onSubmit={handleSubmit} className="space-y-8">
+        <div className="grid gap-6 xl:grid-cols-[1.15fr_0.92fr_1fr]">
+          <section className="rounded-[34px] border border-white/10 bg-white/[0.035] p-5 shadow-[0_24px_90px_rgba(0,0,0,0.24)] backdrop-blur-2xl sm:p-6">
+            <div className="flex flex-col gap-4 border-b border-white/10 pb-5 sm:flex-row sm:items-end sm:justify-between">
+              <h2 className="text-xl font-semibold tracking-[-0.04em] text-white">Impressao</h2>
+              <button
+                type="button"
+                onClick={clearDraft}
+                className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-semibold text-slate-200 transition hover:bg-white/[0.08]"
+              >
+                Limpar mesa
+              </button>
+            </div>
 
-              return (
+            <div className="mt-6 space-y-5">
+              {printers.length ? (
+                <PrinterSelector printers={printers} selectedPrinterId={draft.printerId} onChange={(printerId) => updateDraft({ printerId })} />
+              ) : (
+                <div className="rounded-[28px] border border-dashed border-white/10 bg-[#0a1228]/60 p-5 text-sm leading-6 text-slate-400">
+                  Nenhuma impressora cadastrada. Cadastre a impressora em Configuracoes para liberar a mesa de cotacao.
+                  <div className="mt-4">
+                    <Link to="/pricing" className="inline-flex rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/[0.08]">
+                      Abrir configuracoes
+                    </Link>
+                  </div>
+                </div>
+              )}
+              {!defaultMaterial ? (
+                <div className="rounded-[28px] border border-dashed border-white/10 bg-[#0a1228]/60 p-5 text-sm leading-6 text-slate-400">
+                  Nenhum material cadastrado. Cadastre um material em Configuracoes para liberar o calculo automatico da cotacao.
+                  <div className="mt-4">
+                    <Link to="/catalog/materials" className="inline-flex rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/[0.08]">
+                      Abrir materiais
+                    </Link>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="grid gap-4 md:grid-cols-3">
+                <NumericInput label="Material em gramas" value={draft.materialWeightGrams} onChange={(materialWeightGramsValue) => updateDraft({ materialWeightGrams: materialWeightGramsValue })} suffix="g" hint="consumo" />
+                <NumericInput label="Tempo em horas" value={draft.printHours} onChange={(printHoursValue) => updateDraft({ printHours: printHoursValue })} suffix="h" hint="duracao" />
+                <NumericInput label="Quantidade" value={draft.quantity} onChange={(quantityValue) => updateDraft({ quantity: quantityValue })} hint="unidades" />
+              </div>
+
+              <p className="text-sm text-slate-400">
+                O material padrao configurado na base e usado apenas para calcular o custo tecnico automaticamente.
+              </p>
+            </div>
+          </section>
+
+          <section className="rounded-[34px] border border-white/10 bg-white/[0.035] p-5 shadow-[0_24px_90px_rgba(0,0,0,0.24)] backdrop-blur-2xl sm:p-6">
+            <div className="border-b border-white/10 pb-5">
+              <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-white">Custos do negocio</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-400">Adicione a camada comercial sem voltar para telas administrativas ou planilhas externas.</p>
+            </div>
+
+            <div className="mt-6 grid gap-3">
+              {SALE_CHANNELS.map((channel) => {
+                const isSelected = draft.saleChannel === channel.id;
+
+                return (
+                  <button
+                    key={channel.id}
+                    type="button"
+                    onClick={() => updateDraft({ saleChannel: channel.id })}
+                    className={`rounded-[28px] border p-5 text-left transition ${
+                      isSelected ? 'border-cyan-400/35 bg-cyan-400/[0.08]' : 'border-white/10 bg-[#0a1228]/75 hover:bg-white/[0.05]'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-base font-semibold text-white">{channel.label}</p>
+                        <p className="mt-2 text-sm leading-6 text-slate-400">{channel.description}</p>
+                      </div>
+                      <div className="rounded-full bg-white/[0.08] px-4 py-2 text-sm font-semibold text-cyan-200">{channel.marginPercent}%</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-6 rounded-[30px] border border-white/10 bg-[#0a1228]/78 p-5">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-white">Margem aplicada</p>
+                  <p className="mt-1 text-sm text-slate-400">Use o preset ou destrave uma margem manual para casos especiais.</p>
+                </div>
                 <button
-                  key={step.id}
                   type="button"
-                  onClick={() => setCurrentStep(step.id as QuoteStep)}
-                  className={`flex min-w-[170px] flex-1 rounded-3xl border px-4 py-4 text-left transition ${
-                    isActive
-                      ? 'border-slate-900 bg-slate-900 text-white'
-                      : isCompleted
-                        ? 'border-cyan-200 bg-cyan-50 text-cyan-900'
-                        : 'border-slate-200 bg-slate-50 text-slate-700'
+                  onClick={() => updateDraft({ customMarginEnabled: !draft.customMarginEnabled })}
+                  className={`rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] transition ${
+                    draft.customMarginEnabled ? 'bg-cyan-400 text-slate-950' : 'bg-white/[0.08] text-slate-300'
                   }`}
                 >
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] opacity-80">{step.eyebrow}</p>
-                    <p className="mt-2 text-base font-semibold">{step.title}</p>
+                  {draft.customMarginEnabled ? 'Manual' : 'Preset'}
+                </button>
+              </div>
+
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Canal selecionado</p>
+                  <p className="mt-3 text-lg font-semibold text-white">{selectedChannel.label}</p>
+                  <p className="mt-2 text-sm text-slate-400">Preset padrao: {selectedChannel.marginPercent}%</p>
+                </div>
+
+                {draft.customMarginEnabled ? (
+                  <PercentageField label="Margem manual" value={draft.customMargin} onChange={(customMargin) => updateDraft({ customMargin })} hint="override" />
+                ) : (
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Margem em uso</p>
+                    <p className="mt-3 text-lg font-semibold text-cyan-200">{appliedMargin.toFixed(1)}%</p>
+                    <p className="mt-2 text-sm text-slate-400">Aplicada automaticamente a partir do canal.</p>
                   </div>
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="mt-8 rounded-3xl border border-slate-200 bg-slate-50 p-6">
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-400">{steps[currentStep].eyebrow}</p>
-            <h2 className="mt-2 text-2xl font-semibold text-slate-900">{steps[currentStep].title}</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">{steps[currentStep].description}</p>
-
-            {currentStep === 0 ? (
-              <div className="mt-6 grid gap-5 lg:grid-cols-2">
-                <label className="block">
-                  <span className="mb-2 block text-sm font-medium text-slate-700">Cliente</span>
-                  <input
-                    value={draft.clientName}
-                    onChange={(event) => updateDraft({ clientName: event.target.value })}
-                    placeholder="Ex: Studio Atlas, Ana Paula, Loja XYZ"
-                    className="w-full rounded-2xl border border-slate-200 bg-white p-3"
-                    required
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="mb-2 block text-sm font-medium text-slate-700">Data</span>
-                  <input
-                    type="date"
-                    value={draft.date}
-                    onChange={(event) => updateDraft({ date: event.target.value })}
-                    className="w-full rounded-2xl border border-slate-200 bg-white p-3"
-                    required
-                  />
-                </label>
-
-                <label className="block lg:col-span-2">
-                  <span className="mb-2 block text-sm font-medium text-slate-700">Observacoes internas</span>
-                  <textarea
-                    value={draft.notes}
-                    onChange={(event) => updateDraft({ notes: event.target.value })}
-                    className="min-h-32 w-full rounded-2xl border border-slate-200 bg-white p-3"
-                    placeholder="Opcional. Use este campo para contexto comercial ou detalhes que ajudam na revisao."
-                  />
-                </label>
+                )}
               </div>
-            ) : null}
+            </div>
 
-            {currentStep === 1 ? (
-              <div className="mt-6 space-y-6">
-                <div className="grid gap-3 md:grid-cols-5">
-                  {recentProducts.map((product) => (
-                    <button
-                      key={product.id}
-                      type="button"
-                      onClick={() => addItem(product.id)}
-                      className="rounded-3xl border border-slate-200 bg-white p-4 text-left transition hover:border-cyan-300 hover:bg-cyan-50/50"
-                    >
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Atalho</p>
-                      <p className="mt-2 text-sm font-semibold text-slate-900">{product.nome}</p>
-                      <p className="mt-1 text-xs text-slate-500">{product.sku}</p>
-                    </button>
-                  ))}
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
+              <NumericInput label="Mao de obra" value={draft.laborCost} onChange={(laborCostValue) => updateDraft({ laborCost: laborCostValue })} prefix="R$" hint="fixo" />
+              <NumericInput label="Embalagem" value={draft.packagingCost} onChange={(packagingCostValue) => updateDraft({ packagingCost: packagingCostValue })} prefix="R$" hint="fixo" />
+              <NumericInput label="Energia extra" value={draft.energyAdjustment} onChange={(energyAdjustmentValue) => updateDraft({ energyAdjustment: energyAdjustmentValue })} prefix="R$" hint="ajuste" />
+              <PercentageField label="Taxas comerciais" value={draft.feesPercent} onChange={(feesPercentValue) => updateDraft({ feesPercent: feesPercentValue })} hint="gateway" />
+            </div>
+
+            <div className="mt-6 rounded-[30px] border border-white/10 bg-[#0a1228]/78 p-5">
+              <button
+                type="button"
+                onClick={() => setShowAdvancedCosts((currentValue) => !currentValue)}
+                className="flex w-full items-center justify-between gap-4 text-left"
+              >
+                <div>
+                  <p className="text-sm font-medium text-white">Exibicao progressiva</p>
+                  <p className="mt-1 text-sm text-slate-400">Abra contexto comercial detalhado apenas quando precisar.</p>
                 </div>
+                <span className="rounded-full bg-white/[0.08] px-3 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
+                  {showAdvancedCosts ? 'Ocultar' : 'Expandir'}
+                </span>
+              </button>
 
-                <div className="space-y-4">
-                  {draft.items.map((item, index) => {
-                    const currentLine = enrichedItems[index];
-
-                    return (
-                      <div key={`${item.productId}-${index}`} className="rounded-3xl border border-slate-200 bg-white p-5">
-                        <div className="grid gap-4 xl:grid-cols-[1.8fr_0.6fr_1fr_auto] xl:items-end">
-                          <label className="block">
-                            <span className="mb-2 block text-sm font-medium text-slate-700">Produto</span>
-                            <select
-                              value={item.productId}
-                              onChange={(event) => updateItem(index, { productId: event.target.value })}
-                              className="w-full rounded-2xl border border-slate-200 bg-white p-3"
-                              required
-                            >
-                              <option value="">Escolha um produto do catalogo</option>
-                              {products.map((product) => (
-                                <option key={product.id} value={product.id}>
-                                  {product.nome} • {product.sku}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-
-                          <label className="block">
-                            <span className="mb-2 block text-sm font-medium text-slate-700">Qtd</span>
-                            <input
-                              type="number"
-                              min="1"
-                              value={item.quantity}
-                              onChange={(event) => updateItem(index, { quantity: Number(event.target.value) || 1 })}
-                              className="w-full rounded-2xl border border-slate-200 bg-white p-3 text-right"
-                            />
-                          </label>
-
-                          <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
-                            <p>Custo base</p>
-                            <p className="mt-2 text-lg font-semibold text-slate-900">{formatCurrency(currentLine.unitCost)}</p>
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => removeItem(index)}
-                            className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-                          >
-                            Remover
-                          </button>
-                        </div>
-
-                        {currentLine.product ? (
-                          <div className="mt-4 grid gap-3 md:grid-cols-3">
-                            <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
-                              <p>Material</p>
-                              <p className="mt-2 font-semibold text-slate-900">{currentLine.product.filament.marca} • {currentLine.product.filament.tipo}</p>
-                            </div>
-                            <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
-                              <p>Custo do item</p>
-                              <p className="mt-2 font-semibold text-slate-900">{formatCurrency(currentLine.subtotalCost)}</p>
-                            </div>
-                            <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
-                              <p>Total com margem atual</p>
-                              <p className="mt-2 font-semibold text-slate-900">{formatCurrency(currentLine.subtotalPrice)}</p>
-                            </div>
-                          </div>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => addItem()}
-                  className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-700"
-                >
-                  Adicionar outro item
-                </button>
-              </div>
-            ) : null}
-
-            {currentStep === 2 ? (
-              <div className="mt-6 space-y-6">
-                <div className="grid gap-4 lg:grid-cols-3">
-                  {SALE_CHANNELS.map((channel) => (
-                    <button
-                      key={channel.id}
-                      type="button"
-                      onClick={() => updateDraft({ saleChannel: channel.id })}
-                      className={`rounded-3xl border p-5 text-left transition ${
-                        draft.saleChannel === channel.id
-                          ? 'border-cyan-400 bg-cyan-50 text-cyan-900'
-                          : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                      }`}
-                    >
-                      <p className="text-lg font-semibold">{channel.label}</p>
-                      <p className="mt-2 text-sm leading-6 opacity-90">{channel.description}</p>
-                      <p className="mt-4 text-sm font-semibold">Preset sugerido: {channel.marginPercent}%</p>
-                    </button>
-                  ))}
-                </div>
-
-                <div className="rounded-3xl border border-slate-200 bg-white p-5">
-                  <label className="flex items-center gap-3 text-sm text-slate-700">
+              {showAdvancedCosts ? (
+                <div className="mt-5 grid gap-4">
+                  <label className="block">
+                    <span className="mb-2 block text-sm font-medium text-slate-200">Cliente</span>
                     <input
-                      type="checkbox"
-                      checked={draft.customMarginEnabled}
-                      onChange={(event) =>
-                        updateDraft({
-                          customMarginEnabled: event.target.checked,
-                          customMargin: event.target.checked ? String(selectedChannel.marginPercent) : '',
-                        })
-                      }
-                      className="h-4 w-4 rounded border-slate-300 text-slate-900"
+                      value={draft.clientName}
+                      onChange={(event) => updateDraft({ clientName: event.target.value })}
+                      placeholder="Ex: Studio Atlas"
+                      className="w-full rounded-2xl border border-white/10 bg-[#081120] p-3 text-white"
+                      required
                     />
-                    Quero sobrescrever o preset com uma margem manual
                   </label>
 
-                  {draft.customMarginEnabled ? (
-                    <label className="mt-4 block">
-                      <span className="mb-2 block text-sm font-medium text-slate-700">Margem customizada</span>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.1"
-                        value={draft.customMargin}
-                        onChange={(event) => updateDraft({ customMargin: event.target.value })}
-                        className="w-full rounded-2xl border border-slate-200 bg-white p-3"
-                      />
-                    </label>
-                  ) : null}
+                  <label className="block">
+                    <span className="mb-2 block text-sm font-medium text-slate-200">Data</span>
+                    <input
+                      type="date"
+                      value={draft.date}
+                      onChange={(event) => updateDraft({ date: event.target.value })}
+                      className="w-full rounded-2xl border border-white/10 bg-[#081120] p-3 text-white"
+                      required
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="mb-2 block text-sm font-medium text-slate-200">Notas da proposta</span>
+                    <textarea
+                      value={draft.notes}
+                      onChange={(event) => updateDraft({ notes: event.target.value })}
+                      placeholder="Detalhes comerciais, prazo ou observacoes para a equipe."
+                      className="min-h-28 w-full rounded-2xl border border-white/10 bg-[#081120] p-3 text-white"
+                    />
+                  </label>
                 </div>
-              </div>
-            ) : null}
-
-            {currentStep === 3 ? (
-              <div className="mt-6 space-y-5">
-                <div className="rounded-3xl border border-slate-200 bg-white p-5">
-                  <h3 className="text-lg font-semibold text-slate-900">Resumo do quote</h3>
-                  <div className="mt-4 grid gap-4 md:grid-cols-2">
-                    <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
-                      <p>Cliente</p>
-                      <p className="mt-2 text-lg font-semibold text-slate-900">{draft.clientName || 'Nao informado'}</p>
-                    </div>
-                    <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
-                      <p>Canal de venda</p>
-                      <p className="mt-2 text-lg font-semibold text-slate-900">{selectedChannel.label}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-3xl border border-slate-200 bg-white p-5">
-                  <p className="text-sm leading-6 text-slate-600">
-                    Depois de salvar, o orcamento fica disponivel na lista abaixo com total e itens. Exportar PDF e uma acao opcional para compartilhamento externo, nao uma obrigacao do fluxo.
-                  </p>
-                </div>
-
-                <div className="space-y-3">
-                  {enrichedItems.map((item, index) => (
-                    <div key={`${item.productId}-${index}`} className="rounded-3xl border border-slate-200 bg-white p-5">
-                      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                        <div>
-                          <p className="text-lg font-semibold text-slate-900">{item.product?.nome || 'Produto nao selecionado'}</p>
-                          <p className="mt-1 text-sm text-slate-500">Qtd {item.quantity} • Custo unitario {formatCurrency(item.unitCost)}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Subtotal final</p>
-                          <p className="mt-2 text-lg font-semibold text-slate-900">{formatCurrency(item.subtotalPrice)}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-          </div>
-
-          <div className="mt-6 flex flex-col gap-3 border-t border-slate-200 pt-6 md:flex-row md:items-center md:justify-between">
-            <div className="flex gap-3">
-              {currentStep > 0 ? (
-                <button
-                  type="button"
-                  onClick={goToPreviousStep}
-                  className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-                >
-                  Voltar
-                </button>
-              ) : null}
-
-              {currentStep < 3 ? (
-                <button
-                  type="button"
-                  onClick={continueToNextStep}
-                  disabled={
-                    (currentStep === 0 && !canAdvanceFromClient) ||
-                    (currentStep === 1 && !canAdvanceFromItems) ||
-                    (currentStep === 2 && !canAdvanceFromPricing)
-                  }
-                  className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-                >
-                  Continuar
-                </button>
               ) : null}
             </div>
+          </section>
 
-            {currentStep === 3 ? (
-              <button
-                type="submit"
-                disabled={!canSubmit}
-                className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-              >
-                Salvar orcamento
-              </button>
-            ) : null}
-          </div>
-        </form>
-
-        <aside className="space-y-6">
-          <div className="sticky top-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-400">Resumo em tempo real</p>
-            <h2 className="mt-2 text-2xl font-semibold text-slate-900">Preco antes de exportar</h2>
-
-            <div className="mt-6 space-y-4">
-              <div className="rounded-3xl bg-slate-50 p-5">
-                <p className="text-sm text-slate-500">Canal selecionado</p>
-                <p className="mt-2 text-lg font-semibold text-slate-900">{selectedChannel.label}</p>
-                <p className="mt-1 text-sm text-slate-600">Margem aplicada: {appliedMargin.toFixed(1)}%</p>
-              </div>
-
-              <div className="rounded-3xl bg-slate-50 p-5">
-                <p className="text-sm text-slate-500">Custo base</p>
-                <p className="mt-2 text-2xl font-semibold text-slate-900">{formatCurrency(totalCost)}</p>
-              </div>
-
-              <div className="rounded-3xl bg-slate-900 p-5 text-white">
-                <p className="text-sm text-slate-200">Total estimado do quote</p>
-                <p className="mt-2 text-3xl font-semibold">{formatCurrency(totalPrice)}</p>
-              </div>
+          <aside className="rounded-[34px] border border-cyan-400/15 bg-[linear-gradient(180deg,rgba(7,11,22,0.98),rgba(8,17,32,0.98))] p-5 shadow-[0_32px_100px_rgba(0,0,0,0.32)] backdrop-blur-2xl sm:p-6 xl:sticky xl:top-6 xl:h-fit">
+            <div className="border-b border-white/10 pb-5">
+              <h2 className="mt-2 text-3xl font-semibold tracking-[-0.05em] text-white">Painel de preco ao vivo</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-400">O painel dominante concentra custo, valor sugerido e resultado liquido em tempo real.</p>
             </div>
 
-            <div className="mt-6 border-t border-slate-200 pt-6">
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-400">Linhas atuais</p>
-              <div className="mt-4 space-y-3">
-                {enrichedItems.map((item, index) => (
-                  <div key={`${item.productId}-${index}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm">
-                    <p className="font-semibold text-slate-900">{item.product?.nome || 'Produto pendente'}</p>
-                    <p className="mt-1 text-slate-600">Qtd {item.quantity}</p>
-                    <p className="mt-2 text-slate-900">{formatCurrency(item.subtotalPrice)}</p>
-                  </div>
+            <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
+              <PricingCard label="Custo total" value={productionCost} formatter={formatCurrency} description="Base tecnica + custos comerciais adicionados nesta proposta." />
+              <PricingCard label="Valor sugerido" value={suggestedPrice} formatter={formatCurrency} description="Preco final com margem e taxas aplicadas." tone="accent" emphasize />
+              <PricingCard label="Lucro liquido" value={netProfit} formatter={formatCurrency} description="Leitura pos-custos e pos-taxas da cotacao atual." tone="success" />
+              <PricingCard label="Valor por unidade" value={averageUnitPrice} formatter={formatCurrency} description="Media por unidade considerando toda a cesta da cotacao." tone="warm" />
+            </div>
+
+            <div className="mt-6 rounded-[30px] border border-white/10 bg-white/[0.04] p-5">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-white">Quick presets</p>
+                  <p className="mt-1 text-sm text-slate-400">Aplique quantidades sem reabrir o teclado.</p>
+                </div>
+                <div className="rounded-full bg-white/[0.08] px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-slate-300">
+                  Base atual
+                </div>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-3">
+                {[1, 5, 10, 25].map((quantity) => (
+                  <button
+                    key={quantity}
+                    type="button"
+                    onClick={() => applyQuantityPreset(quantity)}
+                    className={`rounded-2xl px-4 py-3 text-sm font-semibold transition ${
+                      totalQuantity === quantity ? 'bg-cyan-400 text-slate-950' : 'border border-white/10 bg-[#081120] text-slate-200 hover:bg-white/[0.08]'
+                    }`}
+                  >
+                    {quantity} un
+                  </button>
                 ))}
               </div>
             </div>
-          </div>
 
-          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-400">Historico</p>
-                <h2 className="mt-2 text-2xl font-semibold text-slate-900">Ultimos orcamentos</h2>
+            <div className="mt-6 rounded-[30px] border border-white/10 bg-white/[0.04] p-5">
+              <p className="text-sm font-medium text-white">Breakdown rapido</p>
+              <div className="mt-4 space-y-3 text-sm text-slate-300">
+                <div className="flex items-center justify-between gap-4">
+                  <span>Custo dos itens</span>
+                  <span>{formatCurrency(totalItemCost)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span>Custos comerciais</span>
+                  <span>{formatCurrency(additionalOperationalCost)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span>Margem aplicada</span>
+                  <span>{appliedMargin.toFixed(1)}%</span>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span>Taxas</span>
+                  <span>{formatCurrency(feeAmount)}</span>
+                </div>
               </div>
             </div>
 
-            <div className="mt-6 space-y-4">
-              {recentQuotes.length ? (
-                recentQuotes.map((quote) => (
-                  <article key={quote.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                      <div>
-                        <p className="text-lg font-semibold text-slate-900">{quote.nome_cliente}</p>
-                        <p className="mt-1 text-sm text-slate-500">{new Date(quote.data).toLocaleDateString('pt-BR')} • {quote.items.length} item(ns) • {getSaleChannel((quote.sale_channel as SaleChannel) || 'direct').label}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Total</p>
-                        <p className="mt-2 text-lg font-semibold text-slate-900">{formatCurrency(quote.valor_total)}</p>
-                      </div>
-                    </div>
-                    <div className="mt-4 flex flex-wrap gap-3">
-                      <button
-                        type="button"
-                        onClick={() => duplicateQuote(quote)}
-                        className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-                      >
-                        Usar como base
-                      </button>
-                      <a
-                        href={`/api/quotes/${quote.id}/pdf`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
-                      >
-                        PDF opcional
-                      </a>
-                    </div>
-                  </article>
-                ))
-              ) : (
-                <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-8 text-sm text-slate-500">
-                  Os orcamentos salvos aparecem aqui para consulta rapida, reutilizacao e exportacao posterior.
-                </div>
-              )}
+            <div className="mt-6 grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
+              <button
+                type="submit"
+                disabled={!canSubmit}
+                className="rounded-2xl bg-cyan-400 px-5 py-4 text-sm font-semibold text-slate-950 shadow-[0_18px_40px_rgba(34,211,238,0.22)] transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+              >
+                Salvar cotacao
+              </button>
+              <button
+                type="button"
+                onClick={() => handleExportPdf(lastSavedQuoteId || recentQuotes[0]?.id || null)}
+                className="rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-4 text-sm font-semibold text-white transition hover:bg-white/[0.08]"
+              >
+                Exportar PDF
+              </button>
+              <button
+                type="button"
+                onClick={() => recentQuotes[0] && duplicateQuote(recentQuotes[0])}
+                className="rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-4 text-sm font-semibold text-white transition hover:bg-white/[0.08]"
+              >
+                Duplicar cotacao
+              </button>
+            </div>
+          </aside>
+        </div>
+
+        <section className="rounded-[34px] border border-white/10 bg-white/[0.035] p-5 shadow-[0_24px_90px_rgba(0,0,0,0.24)] backdrop-blur-2xl sm:p-6">
+          <div className="flex flex-col gap-4 border-b border-white/10 pb-5 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Historico operacional</p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-white">Cotacoes recentes para duplicar, revisar e exportar</h2>
+            </div>
+            <p className="text-sm text-slate-400">A proposta fica comercialmente legivel sem abrir telas auxiliares.</p>
+          </div>
+
+          <div className="mt-6 grid gap-4 xl:grid-cols-4">
+            {recentQuotes.length ? (
+              recentQuotes.map((quote) => (
+                <article key={quote.id} className="rounded-[30px] border border-white/10 bg-[#0a1228]/78 p-5 shadow-[0_18px_60px_rgba(0,0,0,0.2)]">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">{new Date(quote.data).toLocaleDateString('pt-BR')}</p>
+                  <h3 className="mt-3 text-lg font-semibold text-white">{quote.nome_cliente}</h3>
+                  <p className="mt-2 text-sm text-slate-400">{quote.items.length} item(ns) • {getSaleChannel((quote.sale_channel as SaleChannel) || 'direct').label}</p>
+                  <p className="mt-5 text-2xl font-semibold tracking-[-0.04em] text-cyan-200">{formatCurrency(quote.valor_total)}</p>
+                  <div className="mt-5 flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      onClick={() => duplicateQuote(quote)}
+                      className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/[0.08]"
+                    >
+                      Duplicar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleExportPdf(quote.id)}
+                      className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/[0.08]"
+                    >
+                      PDF
+                    </button>
+                  </div>
+                </article>
+              ))
+            ) : (
+              <div className="rounded-[30px] border border-dashed border-white/10 bg-[#0a1228]/60 p-6 text-sm leading-6 text-slate-400 xl:col-span-4">
+                Ainda nao ha historico salvo nesta base. Monte a primeira cotacao acima e use o painel dominante como referencia principal.
+              </div>
+            )}
+          </div>
+        </section>
+
+        <div className="fixed inset-x-4 bottom-4 z-30 lg:hidden">
+          <div className="rounded-[28px] border border-white/10 bg-[#081120]/92 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.32)] backdrop-blur-2xl">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Live total</p>
+                <p className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-white">{formatCurrency(suggestedPrice)}</p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  disabled={!canSubmit}
+                  className="rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                >
+                  Salvar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleExportPdf(lastSavedQuoteId || recentQuotes[0]?.id || null)}
+                  className="rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm font-semibold text-white"
+                >
+                  PDF
+                </button>
+              </div>
             </div>
           </div>
-        </aside>
-      </div>
+        </div>
+      </form>
     </div>
   );
 }

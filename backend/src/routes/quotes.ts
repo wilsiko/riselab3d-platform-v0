@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import PDFDocument from 'pdfkit';
 import { prisma } from '../prisma';
+import { calculateProductCosts } from '../services/cost';
 import { withFallback, mockData } from '../utils/dbFallback';
 
 const router = Router();
@@ -29,9 +30,50 @@ router.post('/', async (req, res) => {
 
   const normalizedSaleChannel = typeof sale_channel === 'string' && sale_channel.trim() ? sale_channel : 'direct';
   const normalizedMargin = Number.isFinite(Number(margem_percentual)) ? Number(margem_percentual) : 0;
+  const settings = await prisma.globalSettings.findUnique({ where: { tenantId: req.tenantId } });
 
   const quoteItems = await Promise.all(
     items.map(async (item: any) => {
+      if (!item.productId) {
+        const printer = await prisma.printer.findFirst({ where: { id: item.printerId, tenantId: req.tenantId } });
+        const defaultFilament = await prisma.filament.findFirst({ where: { tenantId: req.tenantId } });
+
+        if (!printer) {
+          throw new Error('Printer not found: ' + item.printerId);
+        }
+
+        if (!defaultFilament) {
+          throw new Error('Filament not found for tenant: ' + req.tenantId);
+        }
+
+        const quantidade = Number(item.quantidade);
+        const materialWeightGrams = Number(item.materialWeightGrams);
+        const printHours = Number(item.printHours);
+        const costData = calculateProductCosts(
+          materialWeightGrams,
+          printHours,
+          printer,
+          defaultFilament,
+          settings?.custo_kwh ?? 0,
+          0,
+        );
+        const precoUnitario = Number(item.preco_unitario ?? costData.custoTotal);
+        const subtotalCusto = costData.custoTotal * quantidade;
+        const subtotalPreco = precoUnitario * quantidade;
+
+        return {
+          productId: null,
+          quantidade,
+          preco_unitario: precoUnitario,
+          snapshot_nome: 'Cotacao manual',
+          snapshot_sku: `MANUAL-${printer.nome}`,
+          snapshot_material: `${materialWeightGrams} g • ${printHours} h • ${defaultFilament.marca} ${defaultFilament.tipo}`,
+          custo_base_unitario: costData.custoTotal,
+          subtotal_custo: subtotalCusto,
+          subtotal_preco: subtotalPreco,
+        };
+      }
+
       const product = await prisma.product.findFirst({
         where: { id: item.productId, tenantId: req.tenantId },
         include: { filament: true },
@@ -123,7 +165,7 @@ router.get('/:id/pdf', async (req, res) => {
 
   quote.items.forEach((item, index) => {
     const y = tableTop + 20 + index * 20;
-    doc.text(item.snapshot_sku || item.product.sku, 40, y, { width: 200 });
+    doc.text(item.snapshot_sku || item.product?.sku || 'MANUAL', 40, y, { width: 200 });
     doc.text(String(item.quantidade), 260, y, { width: 50, align: 'right' });
     doc.text(`R$ ${item.preco_unitario.toFixed(2)}`, 330, y, { width: 80, align: 'right' });
     doc.text(`R$ ${(item.subtotal_preco ?? item.preco_unitario * item.quantidade).toFixed(2)}`, 420, y, { width: 90, align: 'right' });

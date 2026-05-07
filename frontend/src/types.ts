@@ -31,7 +31,7 @@ export interface Product {
 }
 
 export interface QuoteItem {
-  productId: string;
+  productId?: string;
   quantidade: number;
   preco_unitario: number;
 }
@@ -46,7 +46,7 @@ export interface Quote {
   margem_percentual?: number;
   valor_total: number;
   items: Array<{
-    product: Product;
+    product?: Product | null;
     quantidade: number;
     preco_unitario: number;
     snapshot_nome?: string | null;

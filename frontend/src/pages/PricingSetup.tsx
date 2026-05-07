@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import api from '../api';
 import { Alert } from '../components/Alert';
 import { Loading } from '../components/Loading';
+import { NumericInput } from '../components/NumericInput';
+import { SummaryWidget } from '../components/SummaryWidget';
 import { SALE_CHANNELS } from '../constants/pricing';
 import { Filament, Printer, Product, Settings } from '../types';
 
@@ -54,7 +56,7 @@ export default function PricingSetup() {
       setIsLoading(true);
       const response = await api.put<Settings>('/settings', { custo_kwh: energyCost });
       setSettings(response.data);
-      setSuccess('Base de energia atualizada. Novos orcamentos passam a usar esse valor como referencia.');
+      setSuccess('Base de energia atualizada. Novas cotacoes passam a usar esse valor como referencia.');
     } catch (requestError: any) {
       setError(requestError?.response?.data?.error || 'Nao foi possivel salvar a regra de energia.');
     } finally {
@@ -66,11 +68,11 @@ export default function PricingSetup() {
     <div className="space-y-8">
       <Loading isLoading={isLoading} label="Ajustando sua engrenagem de precos..." />
 
-      <section className="rounded-[32px] border border-slate-200 bg-white p-8 shadow-sm">
-        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-700">Pricing setup</p>
-        <h1 className="mt-4 text-4xl font-semibold tracking-tight text-slate-900">Regras de custo e padroes do negocio, fora do caminho do uso diario.</h1>
-        <p className="mt-4 max-w-3xl text-base leading-7 text-slate-600">
-          Esta area concentra o que muda pouco: referencia de energia, qualidade do catalogo e presets de margem por canal. O objetivo e dar coerencia sem exigir ajuste manual em cada orcamento.
+      <section className="rounded-[34px] border border-white/10 bg-[linear-gradient(135deg,rgba(8,14,30,0.96),rgba(7,24,44,0.96),rgba(99,102,241,0.12))] p-8 shadow-[0_28px_90px_rgba(0,0,0,0.28)]">
+        <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-200">Sistema de precificacao</p>
+        <h1 className="mt-4 text-4xl font-semibold tracking-[-0.05em] text-white">Regras de custo com leitura de produto, nao tela administrativa comum.</h1>
+        <p className="mt-4 max-w-3xl text-base leading-7 text-slate-300">
+          Energia, presets de canal e qualidade da base ficam isolados numa area clara, leve e comercialmente legivel. A cotacao herda tudo isso sem poluicao visual.
         </p>
       </section>
 
@@ -78,45 +80,43 @@ export default function PricingSetup() {
       {success ? <Alert type="success" message={success} onClose={() => setSuccess(null)} /> : null}
 
       <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-        <form onSubmit={handleSubmit} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-2xl font-semibold text-slate-900">Base de custo ativa</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">Comece pelo valor mais sensivel do seu calculo. O resto do fluxo diario deve herdar esse padrao automaticamente.</p>
+        <form onSubmit={handleSubmit} className="rounded-[32px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_22px_70px_rgba(0,0,0,0.22)]">
+          <h2 className="text-2xl font-semibold tracking-[-0.04em] text-white">Base de custo ativa</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-400">Comece pelo valor mais sensivel do calculo. Depois, toda cotacao herda essa referencia com consistencia.</p>
 
-          <div className="mt-6 rounded-3xl border border-slate-200 bg-slate-50 p-5">
-            <p className="text-sm text-slate-500">Custo atual do kWh</p>
-            <p className="mt-2 text-3xl font-semibold text-slate-900">{formatCurrency(settings.custo_kwh)}</p>
+          <div className="mt-6 rounded-[28px] border border-white/10 bg-[#0a1228]/78 p-5">
+            <p className="text-sm text-slate-400">Custo atual do kWh</p>
+            <p className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-cyan-200">{formatCurrency(settings.custo_kwh)}</p>
           </div>
 
-          <label className="mt-6 block space-y-2 text-sm text-slate-700">
-            Novo custo do kWh
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              value={energyCost}
-              onChange={(event) => setEnergyCost(Number(event.target.value))}
-              className="w-full rounded-2xl border border-slate-200 bg-white p-3"
+          <div className="mt-6">
+            <NumericInput
+              label="Novo custo do kWh"
+              value={String(energyCost)}
+              onChange={(value) => setEnergyCost(Number(value) || 0)}
+              prefix="R$"
+              hint="energia"
             />
-          </label>
+          </div>
 
-          <button type="submit" className="mt-6 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700">
+          <button type="submit" className="mt-6 rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300">
             Salvar base de energia
           </button>
         </form>
 
-        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-2xl font-semibold text-slate-900">Presets de canal</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">O fluxo novo de cotacao usa um preset por contexto de venda para acelerar a decisao comercial.</p>
+        <div className="rounded-[32px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_22px_70px_rgba(0,0,0,0.22)]">
+          <h2 className="text-2xl font-semibold tracking-[-0.04em] text-white">Presets de canal</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-400">A mesa de cotacao usa um preset por contexto de venda para acelerar decisao sem perder coerencia.</p>
 
           <div className="mt-6 space-y-4">
             {SALE_CHANNELS.map((channel) => (
-              <div key={channel.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+              <div key={channel.id} className="rounded-[28px] border border-white/10 bg-[#0a1228]/78 p-5">
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <p className="text-lg font-semibold text-slate-900">{channel.label}</p>
-                    <p className="mt-1 text-sm leading-6 text-slate-600">{channel.description}</p>
+                    <p className="text-lg font-semibold text-white">{channel.label}</p>
+                    <p className="mt-1 text-sm leading-6 text-slate-400">{channel.description}</p>
                   </div>
-                  <div className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
+                  <div className="rounded-full bg-cyan-400/12 px-4 py-2 text-sm font-semibold text-cyan-200">
                     {channel.marginPercent}%
                   </div>
                 </div>
@@ -133,29 +133,38 @@ export default function PricingSetup() {
             value: products.length,
             description: 'Quanto mais produtos preparados, menos digitacao no fluxo diario.',
             to: '/catalog/products',
+            actionLabel: 'Abrir produtos',
           },
           {
-            title: 'Perfis de impressora',
+            title: 'Cadastrar impressoras',
             value: printers.length,
-            description: 'Perfis tecnicos reduzem perguntas operacionais durante a cotacao.',
+            description: 'Perfis tecnicos reduzem perguntas operacionais durante a cotacao e alimentam automaticamente o consumo em watts.',
             to: '/catalog/printers',
+            actionLabel: 'Abrir cadastro de impressoras',
           },
           {
             title: 'Perfis de material',
             value: filaments.length,
             description: 'Materiais padronizados ajudam a manter consistencia de custo e linguagem.',
             to: '/catalog/materials',
+            actionLabel: 'Abrir materiais',
           },
         ].map((card) => (
-          <article key={card.title} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <p className="text-sm text-slate-500">{card.title}</p>
-            <p className="mt-3 text-4xl font-semibold text-slate-900">{card.value}</p>
-            <p className="mt-4 text-sm leading-6 text-slate-600">{card.description}</p>
-            <Link to={card.to} className="mt-6 inline-flex text-sm font-semibold text-cyan-700 transition hover:text-cyan-900">
-              Abrir area relacionada
+          <article key={card.title} className="rounded-[32px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_22px_70px_rgba(0,0,0,0.22)]">
+            <p className="text-sm text-slate-400">{card.title}</p>
+            <p className="mt-3 text-4xl font-semibold tracking-[-0.04em] text-white">{card.value}</p>
+            <p className="mt-4 text-sm leading-6 text-slate-400">{card.description}</p>
+            <Link to={card.to} className="mt-6 inline-flex text-sm font-semibold text-cyan-200 transition hover:text-cyan-100">
+              {card.actionLabel}
             </Link>
           </article>
         ))}
+      </section>
+
+      <section className="grid gap-4 md:grid-cols-3">
+        <SummaryWidget label="Energia ativa" value={formatCurrency(settings.custo_kwh)} description="Referencia padrao aplicada automaticamente no fluxo comercial." />
+        <SummaryWidget label="Catalogo de produtos" value={String(products.length)} description="Quanto maior essa base, menor o atrito da cotacao diaria." />
+        <SummaryWidget label="Base tecnica" value={String(printers.length + filaments.length)} description="Soma de impressoras e materiais operando como infraestrutura." />
       </section>
     </div>
   );

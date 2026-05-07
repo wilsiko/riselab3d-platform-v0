@@ -22,7 +22,7 @@ export default function SettingsPage() {
   return (
     <div>
       <h1 className="text-3xl font-semibold text-slate-900">Configurações Globais</h1>
-      <p className="mt-2 text-slate-600">Defina o custo de energia para cálculo de orçamentos.</p>
+      <p className="mt-2 text-slate-600">Defina o custo de energia para calculo de cotacoes.</p>
 
       <form onSubmit={handleSubmit} className="mt-8 rounded-3xl border border-slate-200 bg-slate-50 p-6 shadow-sm sm:max-w-xl">
         <label className="space-y-2 text-sm text-slate-700">
