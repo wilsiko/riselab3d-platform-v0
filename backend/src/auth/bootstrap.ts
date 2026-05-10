@@ -26,13 +26,11 @@ function buildTenantPrinterData(tenantId: string) {
   }));
 }
 
-export async function ensurePublicTenantSeed() {
-  const tenantId = process.env.PUBLIC_TENANT_ID || 'tenant_1';
-
+export async function ensureTenantOperationalBaseline(tenantId: string, tenantName = 'RiseLab3D Company') {
   await prisma.tenant.upsert({
     where: { id: tenantId },
-    update: { name: 'RiseLab3D Company' },
-    create: { id: tenantId, name: 'RiseLab3D Company' },
+    update: { name: tenantName },
+    create: { id: tenantId, name: tenantName },
   });
 
   await prisma.printer.createMany({
@@ -109,6 +107,11 @@ export async function ensurePublicTenantSeed() {
       },
     });
   }
+}
+
+export async function ensurePublicTenantSeed() {
+  const tenantId = process.env.PUBLIC_TENANT_ID || 'tenant_1';
+  await ensureTenantOperationalBaseline(tenantId, 'RiseLab3D Company');
 }
 
 export async function provisionTenantForUser(name: string, email: string) {

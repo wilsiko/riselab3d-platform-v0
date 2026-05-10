@@ -2,12 +2,22 @@ import { Router } from 'express';
 import { prisma } from '../prisma';
 import { withFallback, mockData } from '../utils/dbFallback';
 import { requireAuth } from '../middleware/auth';
+import { ensureTenantOperationalBaseline } from '../auth/bootstrap';
 
 const router = Router();
 
 router.get('/', async (req, res) => {
   const printers = await withFallback(
-    () => prisma.printer.findMany({ where: { tenantId: req.tenantId } }),
+    async () => {
+      let items = await prisma.printer.findMany({ where: { tenantId: req.tenantId } });
+
+      if (!items.length) {
+        await ensureTenantOperationalBaseline(req.tenantId);
+        items = await prisma.printer.findMany({ where: { tenantId: req.tenantId } });
+      }
+
+      return items;
+    },
     () => mockData.tenant1.printers,
   );
   res.json(printers);

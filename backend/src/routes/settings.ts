@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../prisma';
 import { withFallback, mockData } from '../utils/dbFallback';
 import { requireAuth } from '../middleware/auth';
+import { ensureTenantOperationalBaseline } from '../auth/bootstrap';
 
 const router = Router();
 const defaultSettings = {
@@ -14,7 +15,16 @@ const defaultSettings = {
 
 router.get('/', async (req, res) => {
   const settings = await withFallback(
-    () => prisma.globalSettings.findUnique({ where: { tenantId: req.tenantId } }),
+    async () => {
+      let item = await prisma.globalSettings.findUnique({ where: { tenantId: req.tenantId } });
+
+      if (!item) {
+        await ensureTenantOperationalBaseline(req.tenantId);
+        item = await prisma.globalSettings.findUnique({ where: { tenantId: req.tenantId } });
+      }
+
+      return item;
+    },
     () => mockData.tenant1.settings,
   );
   res.json(settings ? { ...defaultSettings, ...settings } : defaultSettings);
