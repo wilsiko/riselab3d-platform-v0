@@ -8,6 +8,11 @@ export function createOpaqueToken() {
   return crypto.randomBytes(32).toString('hex');
 }
 
+export function createTemporaryPassword(length = 12) {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
+  return Array.from({ length }, () => alphabet[crypto.randomInt(0, alphabet.length)]).join('');
+}
+
 function normalizeOrigin(value: string) {
   try {
     return new URL(value).origin;

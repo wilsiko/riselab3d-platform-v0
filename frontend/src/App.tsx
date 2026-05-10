@@ -9,6 +9,7 @@ import Catalog from './pages/Catalog';
 import PricingSetup from './pages/PricingSetup';
 import Login from './pages/Login';
 import PublicQuote from './pages/PublicQuote';
+import PasswordResetRequired from './pages/PasswordResetRequired';
 
 const settingsNavItem = { label: 'Configuracoes', path: '/pricing' };
 
@@ -37,6 +38,7 @@ function MoonIcon() {
 
 function App() {
   const { user, isAuthenticated, logout } = useAuth();
+  const requiresPasswordChange = isAuthenticated && Boolean(user?.mustChangePassword);
   const primaryNavItems = isAuthenticated
     ? [
         { label: 'Home', path: '/' },
@@ -199,14 +201,15 @@ function App() {
         <main className="relative mt-5 flex-1">
           <div className="rounded-[36px] border border-white/10 bg-white/[0.035] p-3 shadow-[0_30px_100px_rgba(0,0,0,0.24)] backdrop-blur-2xl sm:p-5 lg:p-6">
             <Routes>
-              <Route path="/" element={isAuthenticated ? <Home /> : <Navigate to="/quotes" replace />} />
+              <Route path="/" element={isAuthenticated ? (requiresPasswordChange ? <Navigate to="/password-reset-required" replace /> : <Home />) : <Navigate to="/quotes" replace />} />
               <Route path="/login" element={<Login />} />
-              <Route path="/quotes" element={<Quotes />} />
-              <Route path="/shared/quotes/:token" element={<PublicQuote />} />
-              <Route path="/catalog" element={<Catalog />} />
-              <Route path="/catalog/products" element={<Products />} />
-              <Route path="/catalog/printers" element={<Printers />} />
-              <Route path="/pricing" element={<PricingSetup />} />
+              <Route path="/password-reset-required" element={isAuthenticated ? <PasswordResetRequired /> : <Navigate to="/login" replace />} />
+              <Route path="/quotes" element={requiresPasswordChange ? <Navigate to="/password-reset-required" replace /> : <Quotes />} />
+              <Route path="/shared/quotes/:token" element={requiresPasswordChange ? <Navigate to="/password-reset-required" replace /> : <PublicQuote />} />
+              <Route path="/catalog" element={requiresPasswordChange ? <Navigate to="/password-reset-required" replace /> : <Catalog />} />
+              <Route path="/catalog/products" element={requiresPasswordChange ? <Navigate to="/password-reset-required" replace /> : <Products />} />
+              <Route path="/catalog/printers" element={requiresPasswordChange ? <Navigate to="/password-reset-required" replace /> : <Printers />} />
+              <Route path="/pricing" element={requiresPasswordChange ? <Navigate to="/password-reset-required" replace /> : <PricingSetup />} />
               <Route path="/dashboard" element={<Navigate to="/" replace />} />
               <Route path="/products" element={<Navigate to="/catalog/products" replace />} />
               <Route path="/filaments" element={<Navigate to="/catalog/products" replace />} />

@@ -81,4 +81,5 @@ export interface AuthUser {
   email: string;
   name: string | null;
   emailVerified: boolean;
+  mustChangePassword: boolean;
 }

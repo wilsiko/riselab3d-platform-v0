@@ -20,6 +20,8 @@ interface AuthContextValue {
   login(payload: LoginPayload): Promise<{ error?: string | null }>;
   register(payload: RegisterPayload): Promise<{ error?: string | null; message?: string | null }>;
   loginWithGoogle(idToken: string): Promise<{ error?: string | null }>;
+  requestPasswordReset(email: string): Promise<{ error?: string | null; message?: string | null }>;
+  changePassword(newPassword: string): Promise<{ error?: string | null; message?: string | null }>;
   logout(): Promise<void>;
   refresh(): Promise<void>;
 }
@@ -77,6 +79,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function requestPasswordReset(email: string) {
+    try {
+      const response = await api.post<{ message?: string | null }>('/auth/forgot-password', { email });
+      return { message: response.data.message || 'Se o e-mail existir, enviaremos uma senha temporaria.' };
+    } catch (error: any) {
+      return { error: error?.response?.data?.error || 'Nao foi possivel solicitar a senha temporaria.' };
+    }
+  }
+
+  async function changePassword(newPassword: string) {
+    try {
+      const response = await api.post<{ user: AuthUser; message?: string | null }>('/auth/change-password', { newPassword });
+      setUser(response.data.user);
+      return { message: response.data.message || 'Senha atualizada com sucesso.' };
+    } catch (error: any) {
+      return { error: error?.response?.data?.error || 'Nao foi possivel atualizar a senha.' };
+    }
+  }
+
   async function logout() {
     try {
       await api.post('/auth/logout');
@@ -94,6 +115,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         register,
         loginWithGoogle,
+        requestPasswordReset,
+        changePassword,
         logout,
         refresh,
       }}

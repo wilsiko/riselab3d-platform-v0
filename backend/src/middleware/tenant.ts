@@ -10,6 +10,7 @@ declare global {
         email: string;
         name: string | null;
         emailVerifiedAt: Date | null;
+        mustChangePassword: boolean;
       } | null;
     }
   }

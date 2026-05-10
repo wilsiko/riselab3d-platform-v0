@@ -44,6 +44,8 @@ model User {
   name            String?
   googleId        String?  @unique
   emailVerifiedAt DateTime?
+  mustChangePassword Boolean @default(false)
+  temporaryPasswordSentAt DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @default(now()) @updatedAt
   sessions        AuthSession[]

@@ -38,3 +38,29 @@ export async function sendVerificationEmail(to: string, verificationUrl: string)
     `,
   });
 }
+
+export async function sendTemporaryPasswordEmail(to: string, temporaryPassword: string) {
+  const resend = getResendClient();
+
+  if (!resend) {
+    console.warn('RESEND_API_KEY not configured. Temporary password email skipped for', to);
+    return;
+  }
+
+  const from = process.env.RESEND_FROM_EMAIL || 'RiseLab3D <onboarding@resend.dev>';
+
+  await resend.emails.send({
+    from,
+    to,
+    subject: 'Sua senha temporaria da RiseLab3D',
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#0f172a;">
+        <h1 style="font-size:22px;margin-bottom:12px;">Senha temporaria solicitada</h1>
+        <p style="line-height:1.6;margin-bottom:16px;">Recebemos um pedido de redefinicao de senha para a sua conta. Use a senha temporaria abaixo para entrar.</p>
+        <div style="margin:0 0 20px 0;padding:14px 16px;border-radius:14px;background:#082f49;color:#ecfeff;font-size:22px;font-weight:700;letter-spacing:0.08em;text-align:center;">${temporaryPassword}</div>
+        <p style="line-height:1.6;margin-bottom:16px;">No primeiro acesso, a plataforma vai exigir a definicao de uma nova senha antes de continuar.</p>
+        <p style="font-size:13px;line-height:1.6;color:#475569;">Se voce nao solicitou esta redefinicao, entre em contato com o suporte e descarte esta mensagem.</p>
+      </div>
+    `,
+  });
+}

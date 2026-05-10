@@ -46,6 +46,7 @@ export async function attachAuthUser(req: Request, _res: Response, next: NextFun
     email: session.user.email,
     name: session.user.name,
     emailVerifiedAt: session.user.emailVerifiedAt,
+    mustChangePassword: session.user.mustChangePassword,
   };
 
   next();
