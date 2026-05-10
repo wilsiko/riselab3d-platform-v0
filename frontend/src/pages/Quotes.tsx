@@ -1474,7 +1474,7 @@ export default function Quotes() {
           <div className="mt-6 grid gap-4 xl:grid-cols-4">
             {!isAuthenticated ? (
               <div className="rounded-[30px] border border-dashed border-cyan-400/25 bg-cyan-400/[0.06] p-6 text-sm leading-7 text-slate-300 xl:col-span-4">
-                O historico salvo fica vinculado ao tenant da conta autenticada.
+                O historico salvo fica vinculado à conta autenticada.
                 <div className="mt-4">
                   <Link to="/login" className="brand-primary-action inline-flex rounded-2xl px-4 py-3 text-sm font-semibold transition">
                     Entrar para liberar historico

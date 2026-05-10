@@ -156,12 +156,12 @@ export default function Login() {
         <GoogleLoginButton onCredential={handleGoogleCredential} />
 
         <p className="mt-5 text-center text-xs leading-6 text-slate-500">
-          Ao entrar, suas cotações, clientes e parâmetros ficam vinculados ao seu tenant.
+          Ao entrar, suas cotações, clientes e parâmetros ficam vinculados à sua conta.
         </p>
 
         <div className="mt-6 border-t border-white/10 pt-4">
           <div className="grid gap-2 text-center text-[11px] leading-5 text-slate-500 sm:grid-cols-3 sm:text-left">
-            <p>Seus dados de acesso e operacao permanecem vinculados ao seu tenant.</p>
+            <p>Seus dados de acesso e operacao permanecem vinculados à sua conta.</p>
             <p>As sessoes do app usam cookie HTTP-only para reduzir exposicao no navegador.</p>
             <p>Recuperacao de senha e confirmacao de e-mail exigem validacao pelo endereco cadastrado.</p>
           </div>
