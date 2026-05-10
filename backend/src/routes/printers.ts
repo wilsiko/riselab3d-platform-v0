@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../prisma';
 import { withFallback, mockData } from '../utils/dbFallback';
+import { requireAuth } from '../middleware/auth';
 
 const router = Router();
 
@@ -13,6 +14,10 @@ router.get('/', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
+  if (!req.authUser) {
+    return requireAuth(req, res, () => undefined);
+  }
+
   const { nome, consumo_watts, custo_aquisicao, vida_util_horas } = req.body;
   const printer = await prisma.printer.create({
     data: {
@@ -27,6 +32,10 @@ router.post('/', async (req, res) => {
 });
 
 router.put('/:id', async (req, res) => {
+  if (!req.authUser) {
+    return requireAuth(req, res, () => undefined);
+  }
+
   const { id } = req.params;
   const { nome, consumo_watts, custo_aquisicao, vida_util_horas } = req.body;
   const printer = await prisma.printer.updateMany({
@@ -46,6 +55,10 @@ router.put('/:id', async (req, res) => {
 });
 
 router.delete('/:id', async (req, res) => {
+  if (!req.authUser) {
+    return requireAuth(req, res, () => undefined);
+  }
+
   const { id } = req.params;
   await prisma.printer.deleteMany({ where: { id, tenantId: req.tenantId } });
   res.json({ removed: true });

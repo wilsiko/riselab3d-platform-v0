@@ -1,5 +1,6 @@
 import { prisma } from './prisma';
 import { printerCatalogSeeds } from './data/printerCatalog';
+import bcrypt from 'bcryptjs';
 
 async function main() {
   const tenantId = 'tenant_1';
@@ -12,8 +13,8 @@ async function main() {
 
   await prisma.user.upsert({
     where: { email: 'admin@riselab3d.com' },
-    update: { password: 'changeme' },
-    create: { email: 'admin@riselab3d.com', password: 'changeme', tenantId: tenant.id },
+    update: { password: await bcrypt.hash('changeme123', 10), emailVerifiedAt: new Date(), name: 'Administrador' },
+    create: { email: 'admin@riselab3d.com', password: await bcrypt.hash('changeme123', 10), emailVerifiedAt: new Date(), name: 'Administrador', tenantId: tenant.id },
   });
 
   await prisma.quoteItem.deleteMany({ where: { quote: { tenantId } } });
@@ -68,8 +69,8 @@ async function main() {
 
   await prisma.globalSettings.upsert({
     where: { tenantId },
-    update: { custo_kwh: 1.05 },
-    create: { tenantId, custo_kwh: 1.05 },
+    update: { custo_kwh: 1.05, direct_margin_percent: 20, ecommerce_margin_percent: 35, end_customer_margin_percent: 50 },
+    create: { tenantId, custo_kwh: 1.05, direct_margin_percent: 20, ecommerce_margin_percent: 35, end_customer_margin_percent: 50 },
   });
 
   await prisma.product.upsert({

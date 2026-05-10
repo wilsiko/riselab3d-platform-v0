@@ -5,6 +5,7 @@ import { Loading } from '../components/Loading';
 import { NumericInput } from '../components/NumericInput';
 import { SummaryWidget } from '../components/SummaryWidget';
 import { Printer } from '../types';
+import { parseLocaleNumber } from '../utils/number';
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -81,9 +82,9 @@ export default function Printers() {
             <span className="mb-2 block text-sm font-medium text-slate-200">Nome</span>
             <input value={form.nome} onChange={(event) => setForm({ ...form, nome: event.target.value })} className="w-full rounded-2xl border border-white/10 bg-[#081120] p-3 text-white" placeholder="Ex: Ender 3" required />
           </label>
-          <NumericInput label="Consumo" value={String(form.consumo_watts)} onChange={(value) => setForm({ ...form, consumo_watts: Number(value) || 0 })} suffix="W" hint="energia" />
-          <NumericInput label="Custo de aquisicao" value={String(form.custo_aquisicao)} onChange={(value) => setForm({ ...form, custo_aquisicao: Number(value) || 0 })} prefix="R$" hint="capex" />
-          <NumericInput label="Vida util" value={String(form.vida_util_horas)} onChange={(value) => setForm({ ...form, vida_util_horas: Number(value) || 0 })} suffix="h" hint="uso" />
+          <NumericInput label="Consumo" value={String(form.consumo_watts)} onChange={(value) => setForm({ ...form, consumo_watts: parseLocaleNumber(value) })} suffix="W" hint="energia" />
+          <NumericInput label="Custo de aquisicao" value={String(form.custo_aquisicao)} onChange={(value) => setForm({ ...form, custo_aquisicao: parseLocaleNumber(value) })} prefix="R$" hint="capex" />
+          <NumericInput label="Vida util" value={String(form.vida_util_horas)} onChange={(value) => setForm({ ...form, vida_util_horas: parseLocaleNumber(value) })} suffix="h" hint="uso" />
         </div>
 
         <button type="submit" className="mt-6 rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300">

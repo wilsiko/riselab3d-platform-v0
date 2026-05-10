@@ -41,15 +41,14 @@ export function NumericInput({
         {prefix ? <span className="text-sm font-semibold text-cyan-200">{prefix}</span> : null}
         <input
           id={id}
-          type="number"
+          type="text"
           inputMode="decimal"
-          step={step}
-          min={min}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}
           aria-invalid={error ? 'true' : 'false'}
           aria-describedby={error && id ? `${id}-error` : undefined}
+          autoComplete="off"
           className="w-full border-0 bg-transparent p-0 text-base font-semibold text-white outline-none placeholder:text-slate-500"
         />
         {suffix ? <span className="text-sm font-semibold text-slate-400">{suffix}</span> : null}

@@ -2,8 +2,15 @@ import { useEffect, useState, FormEvent } from 'react';
 import api from '../api';
 import { Settings } from '../types';
 
+const defaultSettings: Settings = {
+  custo_kwh: 1.05,
+  direct_margin_percent: 20,
+  ecommerce_margin_percent: 35,
+  end_customer_margin_percent: 50,
+};
+
 export default function SettingsPage() {
-  const [settings, setSettings] = useState<Settings>({ custo_kwh: 1.05 });
+  const [settings, setSettings] = useState<Settings>(defaultSettings);
   const [value, setValue] = useState(settings.custo_kwh);
 
   useEffect(() => {
@@ -15,7 +22,7 @@ export default function SettingsPage() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const response = await api.put<Settings>('/settings', { custo_kwh: value });
+    const response = await api.put<Settings>('/settings', { ...settings, custo_kwh: value });
     setSettings(response.data);
   };
 

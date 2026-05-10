@@ -34,6 +34,9 @@ export const mockData = {
       id: 'settings_1',
       tenantId: 'tenant_1',
       custo_kwh: 1.05,
+      direct_margin_percent: 20,
+      ecommerce_margin_percent: 35,
+      end_customer_margin_percent: 50,
     },
     products: [
       {

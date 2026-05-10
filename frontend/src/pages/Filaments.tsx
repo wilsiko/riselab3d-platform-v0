@@ -5,6 +5,7 @@ import { Loading } from '../components/Loading';
 import { NumericInput } from '../components/NumericInput';
 import { SummaryWidget } from '../components/SummaryWidget';
 import { Filament } from '../types';
+import { parseLocaleNumber } from '../utils/number';
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -85,7 +86,7 @@ export default function Filaments() {
             <span className="mb-2 block text-sm font-medium text-slate-200">Tipo</span>
             <input value={form.tipo} onChange={(event) => setForm({ ...form, tipo: event.target.value })} className="w-full rounded-2xl border border-white/10 bg-[#081120] p-3 text-white" placeholder="Ex: PLA" required />
           </label>
-          <NumericInput label="Custo por kg" value={String(form.custo_por_kg)} onChange={(value) => setForm({ ...form, custo_por_kg: Number(value) || 0 })} prefix="R$" hint="kg" />
+          <NumericInput label="Custo por kg" value={String(form.custo_por_kg)} onChange={(value) => setForm({ ...form, custo_por_kg: parseLocaleNumber(value) })} prefix="R$" hint="kg" />
         </div>
 
         <button type="submit" className="mt-6 rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300">

@@ -1,9 +1,11 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api';
+import { useAuth } from '../auth/AuthContext';
 import { Alert } from '../components/Alert';
 import { Loading } from '../components/Loading';
-import { Quote } from '../types';
+import { getSaleChannels } from '../constants/pricing';
+import { Quote, Settings } from '../types';
 
 interface DashboardStats {
   productsCount: number;
@@ -16,9 +18,88 @@ function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 }
 
+function formatQuoteTimestamp(value: string) {
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).format(new Date(value));
+}
+
+function ChannelIcon({ channelId }: { channelId: string }) {
+  if (channelId === 'direct') {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-3.5 w-3.5" aria-hidden="true">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 12h16M13 5l7 7-7 7" />
+      </svg>
+    );
+  }
+
+  if (channelId === 'ecommerce') {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-3.5 w-3.5" aria-hidden="true">
+        <circle cx="9" cy="19" r="1.5" />
+        <circle cx="17" cy="19" r="1.5" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3 5h2l2.4 9.2a1 1 0 0 0 1 .8h8.8a1 1 0 0 0 1-.76L20 8H7" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-3.5 w-3.5" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 21s-6-4.35-6-10a3.75 3.75 0 0 1 6-2.98A3.75 3.75 0 0 1 18 11c0 5.65-6 10-6 10Z" />
+    </svg>
+  );
+}
+
+function renderChannelPriceBadges(unitCost: number | null, saleChannels: ReturnType<typeof getSaleChannels>) {
+  if (unitCost === null) {
+    return (
+      <span className="text-sm text-slate-500">Valores nao informados</span>
+    );
+  }
+
+  return saleChannels.map((channel) => {
+    const salePrice = unitCost * (1 + channel.marginPercent / 100);
+
+    return (
+      <span
+        key={channel.id}
+        title={channel.label}
+        aria-label={`${channel.label}: ${formatCurrency(salePrice)}`}
+        className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-sm text-slate-300"
+      >
+        <span className="text-cyan-200">
+          <ChannelIcon channelId={channel.id} />
+        </span>
+        <span className="font-medium text-slate-200">{formatCurrency(salePrice)}</span>
+      </span>
+    );
+  });
+}
+
+function getQuotePrimarySummary(quote: Quote) {
+  const primaryItem = quote.items[0];
+  const productName = primaryItem?.snapshot_nome || primaryItem?.product?.nome || 'Item sem titulo';
+  const totalQuantity = quote.items.reduce((sum, item) => sum + item.quantidade, 0);
+  const unitCost = primaryItem?.custo_base_unitario
+    ?? (typeof primaryItem?.subtotal_custo === 'number' && primaryItem.quantidade > 0 ? primaryItem.subtotal_custo / primaryItem.quantidade : null)
+    ?? (typeof quote.subtotal_custo === 'number' && totalQuantity > 0 ? quote.subtotal_custo / totalQuantity : null);
+
+  return {
+    productName,
+    unitCost,
+  };
+}
+
 export default function Home() {
+  const { isAuthenticated } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [quotes, setQuotes] = useState<Quote[]>([]);
+  const [settings, setSettings] = useState<Settings>({ custo_kwh: 0, direct_margin_percent: 20, ecommerce_margin_percent: 35, end_customer_margin_percent: 50 });
   const [quoteSearch, setQuoteSearch] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,12 +109,19 @@ export default function Home() {
     const loadHome = async () => {
       try {
         setIsLoading(true);
-        const [statsRes, quotesRes] = await Promise.all([
+        const [statsRes, settingsRes] = await Promise.all([
           api.get<DashboardStats>('/dashboard'),
-          api.get<Quote[]>('/quotes'),
+          api.get<Settings>('/settings'),
         ]);
         setStats(statsRes.data);
-        setQuotes(quotesRes.data);
+        setSettings(settingsRes.data);
+
+        if (isAuthenticated) {
+          const quotesRes = await api.get<Quote[]>('/quotes');
+          setQuotes(quotesRes.data);
+        } else {
+          setQuotes([]);
+        }
       } catch (requestError: any) {
         setError(requestError?.response?.data?.error || 'Nao foi possivel carregar a visao inicial.');
       } finally {
@@ -42,7 +130,7 @@ export default function Home() {
     };
 
     loadHome();
-  }, []);
+  }, [isAuthenticated]);
 
   const filteredQuotes = useMemo(() => {
     const normalizedQuery = deferredQuoteSearch.trim().toLowerCase();
@@ -62,6 +150,7 @@ export default function Home() {
           quote.nome_cliente,
           quote.sale_channel,
           new Date(quote.data).toLocaleDateString('pt-BR'),
+          formatQuoteTimestamp(quote.createdAt),
           itemSummary,
         ]
           .filter(Boolean)
@@ -72,6 +161,8 @@ export default function Home() {
       })
       .slice(0, 12);
   }, [deferredQuoteSearch, quotes]);
+
+  const saleChannels = getSaleChannels(settings);
 
   return (
     <div className="space-y-8">
@@ -104,7 +195,7 @@ export default function Home() {
                 type="search"
                 value={quoteSearch}
                 onChange={(event) => setQuoteSearch(event.target.value)}
-                placeholder="Buscar por cliente, SKU, material ou data"
+                placeholder="Ex.: nome do produto ou cliente"
                 className="w-full border-0 bg-transparent p-0 text-sm font-medium text-white outline-none placeholder:text-slate-500"
               />
             </label>
@@ -119,47 +210,49 @@ export default function Home() {
         </div>
 
         <div className="mt-5 flex items-center justify-between gap-3 border-t border-white/10 pt-5 text-sm text-slate-400">
-          <p>{filteredQuotes.length} resultado(s) exibido(s)</p>
+          <p>{isAuthenticated ? `${filteredQuotes.length} resultado(s) exibido(s)` : 'Historico salvo liberado apenas apos login'}</p>
           <Link to="/quotes" className="font-semibold text-cyan-200 transition hover:text-cyan-100">
             Abrir fluxo completo
           </Link>
         </div>
 
         <div className="mt-6 space-y-3">
-          {filteredQuotes.length ? (
+          {!isAuthenticated ? (
+            <div className="rounded-[28px] border border-dashed border-cyan-400/25 bg-cyan-400/[0.06] p-8 text-sm leading-7 text-slate-300">
+              O modo visitante deixa a simulacao aberta, mas o historico de cotações fica reservado para contas autenticadas.
+              <div className="mt-4">
+                <Link to="/login" className="inline-flex rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300">
+                  Entrar para ver historico
+                </Link>
+              </div>
+            </div>
+          ) : filteredQuotes.length ? (
             filteredQuotes.map((quote) => {
-              const primaryItem = quote.items[0];
-              const itemLabel = primaryItem?.snapshot_nome || primaryItem?.product?.nome || 'Item sem titulo';
-              const itemSku = primaryItem?.snapshot_sku || primaryItem?.product?.sku;
+              const { productName, unitCost } = getQuotePrimarySummary(quote);
 
               return (
                 <Link
                   key={quote.id}
-                  to="/quotes"
+                  to={`/quotes?quote=${quote.id}`}
                   className="group block rounded-[24px] border border-white/10 bg-[#0a1228]/75 px-4 py-3 transition hover:border-cyan-400/35 hover:bg-cyan-400/[0.08]"
                 >
-                  <div className="grid gap-3 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_auto] xl:items-center">
+                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] xl:items-center">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-3">
-                        <p className="truncate text-sm font-semibold text-white">{quote.nome_cliente}</p>
-                        <span className="rounded-full bg-white/[0.05] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-300">
-                          {quote.items.length} item(ns)
-                        </span>
-                      </div>
+                      <p className="truncate text-base font-semibold text-white">{productName}</p>
                       <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
-                        <span>{new Date(quote.data).toLocaleDateString('pt-BR')}</span>
-                        <span className="truncate">{itemLabel}{itemSku ? ` • ${itemSku}` : ''}</span>
+                        <span>{quote.nome_cliente}</span>
+                        <span>{formatQuoteTimestamp(quote.createdAt)}</span>
                       </div>
                     </div>
 
-                    <div className="grid gap-2 text-xs xl:grid-cols-2 xl:text-right">
+                    <div className="grid gap-2 text-xs xl:text-right">
                       <div>
-                        <p className="font-semibold uppercase tracking-[0.18em] text-slate-500">Canal</p>
-                        <p className="mt-1 text-sm text-slate-300">{quote.sale_channel || 'direct'}</p>
+                        <p className="font-semibold uppercase tracking-[0.18em] text-slate-500">Custo unitario</p>
+                        <p className="mt-1 text-base font-semibold text-cyan-200">{unitCost !== null ? formatCurrency(unitCost) : 'Nao informado'}</p>
                       </div>
                       <div>
-                        <p className="font-semibold uppercase tracking-[0.18em] text-slate-500">Total</p>
-                        <p className="mt-1 text-sm font-semibold text-cyan-200">{formatCurrency(quote.valor_total)}</p>
+                        <p className="font-semibold uppercase tracking-[0.18em] text-slate-500">Venda por canal</p>
+                        <div className="mt-2 flex flex-wrap justify-start gap-2 xl:justify-end">{renderChannelPriceBadges(unitCost, saleChannels)}</div>
                       </div>
                     </div>
 

@@ -8,8 +8,9 @@ const apiBaseURL =
 
 const api = axios.create({
   baseURL: apiBaseURL,
+  withCredentials: true,
   headers: {
-    'X-Tenant-Id': 'tenant_1',
+    'X-Tenant-Id': import.meta.env.VITE_PUBLIC_TENANT_ID || 'tenant_1',
   },
 });
 

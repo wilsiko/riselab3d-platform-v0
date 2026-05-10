@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Navigate, Route, Routes } from 'react-router-dom';
+import { useAuth } from './auth/AuthContext';
 import Home from './pages/Home';
 import Printers from './pages/Printers';
 import Filaments from './pages/Filaments';
@@ -7,11 +8,8 @@ import Products from './pages/Products';
 import Quotes from './pages/Quotes';
 import Catalog from './pages/Catalog';
 import PricingSetup from './pages/PricingSetup';
-
-const primaryNavItems = [
-  { label: 'Home', path: '/' },
-  { label: 'Cotacoes', path: '/quotes' },
-];
+import Login from './pages/Login';
+import PublicQuote from './pages/PublicQuote';
 
 const settingsNavItem = { label: 'Configuracoes', path: '/pricing' };
 
@@ -39,6 +37,13 @@ function MoonIcon() {
 }
 
 function App() {
+  const { user, isAuthenticated, logout } = useAuth();
+  const primaryNavItems = isAuthenticated
+    ? [
+        { label: 'Home', path: '/' },
+        { label: 'Cotacoes', path: '/quotes' },
+      ]
+    : [{ label: 'Cotacoes', path: '/quotes' }];
   const [visualMode, setVisualMode] = useState<'dark' | 'light'>(() => {
     if (typeof window === 'undefined') {
       return 'dark';
@@ -57,7 +62,7 @@ function App() {
   }, [visualMode]);
 
   return (
-    <div className={`min-h-screen overflow-x-hidden ${visualMode === 'dark' ? 'bg-[#050816] text-slate-100 theme-dark' : 'bg-[#eef4fb] text-slate-900 theme-light'}`}>
+    <div className={`min-h-screen overflow-x-clip ${visualMode === 'dark' ? 'bg-[#050816] text-slate-100 theme-dark' : 'bg-[#eef4fb] text-slate-900 theme-light'}`}>
       <div
         className={`pointer-events-none absolute inset-0 ${
           visualMode === 'dark'
@@ -75,14 +80,16 @@ function App() {
         <header className="sticky top-4 z-20 rounded-[28px] border border-white/10 bg-white/5 px-5 py-4 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-2xl">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
-              <Link to="/" className="min-w-fit">
+              <Link to={isAuthenticated ? '/' : '/quotes'} className="min-w-fit">
                 <div className="flex items-center gap-4">
                   <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-cyan-400/30 bg-cyan-400/10 text-sm font-semibold tracking-[0.3em] text-cyan-200">
                     RL
                   </div>
                   <div>
                     <p className="text-lg font-semibold tracking-[0.18em] text-white">RiseLab3D</p>
-                    <p className="text-xs uppercase tracking-[0.24em] text-slate-400">Motor de precificacao para impressao 3D</p>
+                    <p className="text-xs uppercase tracking-[0.24em] text-slate-400">
+                      {isAuthenticated ? 'Motor de precificacao para impressao 3D' : 'Cotacao guiada para impressao 3D'}
+                    </p>
                   </div>
                 </div>
               </Link>
@@ -123,6 +130,30 @@ function App() {
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
+              <div className="rounded-2xl border border-white/10 bg-[#0a1228]/70 px-4 py-2.5 text-sm text-slate-300">
+                {isAuthenticated ? (
+                  <div className="flex items-center gap-3">
+                    <div>
+                      <p className="font-semibold text-white">{user?.name || user?.email}</p>
+                      <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Cliente premium</p>
+                    </div>
+                    <button type="button" onClick={() => logout()} className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/[0.08] hover:text-white">
+                      Sair
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <div>
+                      <p className="font-semibold text-white">Modo visitante</p>
+                      <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Cotacao livre sem historico</p>
+                    </div>
+                    <Link to="/login" className="rounded-xl bg-cyan-400 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-cyan-300">
+                      Entrar
+                    </Link>
+                  </div>
+                )}
+              </div>
+
               <div
                 className={`flex items-center gap-1 rounded-full border p-1 backdrop-blur-2xl transition ${
                   visualMode === 'dark' ? 'border-white/10 bg-white/[0.05]' : 'border-slate-200/80 bg-white/80 shadow-[0_12px_32px_rgba(148,163,184,0.18)]'
@@ -169,8 +200,10 @@ function App() {
         <main className="relative mt-5 flex-1">
           <div className="rounded-[36px] border border-white/10 bg-white/[0.035] p-3 shadow-[0_30px_100px_rgba(0,0,0,0.24)] backdrop-blur-2xl sm:p-5 lg:p-6">
             <Routes>
-              <Route path="/" element={<Home />} />
+              <Route path="/" element={isAuthenticated ? <Home /> : <Navigate to="/quotes" replace />} />
+              <Route path="/login" element={<Login />} />
               <Route path="/quotes" element={<Quotes />} />
+              <Route path="/shared/quotes/:token" element={<PublicQuote />} />
               <Route path="/catalog" element={<Catalog />} />
               <Route path="/catalog/products" element={<Products />} />
               <Route path="/catalog/materials" element={<Filaments />} />

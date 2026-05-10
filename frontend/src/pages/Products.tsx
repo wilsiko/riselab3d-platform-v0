@@ -6,6 +6,7 @@ import { NumericInput } from '../components/NumericInput';
 import { Pagination } from '../components/Pagination';
 import { SummaryWidget } from '../components/SummaryWidget';
 import { Filament, Printer, Product } from '../types';
+import { parseLocaleNumber } from '../utils/number';
 
 const ITEMS_PER_PAGE = 6;
 
@@ -132,9 +133,9 @@ export default function Products() {
             <input value={form.variacao} onChange={(event) => setForm({ ...form, variacao: event.target.value })} className="w-full rounded-2xl border border-white/10 bg-[#081120] p-3 text-white" required />
           </label>
 
-          <NumericInput label="Peso" value={String(form.peso_gramas)} onChange={(value) => setForm({ ...form, peso_gramas: Number(value) || 0 })} suffix="g" hint="massa" />
-          <NumericInput label="Tempo de impressao" value={String(form.tempo_impressao_horas)} onChange={(value) => setForm({ ...form, tempo_impressao_horas: Number(value) || 0 })} suffix="h" hint="job" />
-          <NumericInput label="Custos adicionais" value={String(form.additional_cost)} onChange={(value) => setForm({ ...form, additional_cost: Number(value) || 0 })} prefix="R$" hint="extra" />
+          <NumericInput label="Peso" value={String(form.peso_gramas)} onChange={(value) => setForm({ ...form, peso_gramas: parseLocaleNumber(value) })} suffix="g" hint="massa" />
+          <NumericInput label="Tempo de impressao" value={String(form.tempo_impressao_horas)} onChange={(value) => setForm({ ...form, tempo_impressao_horas: parseLocaleNumber(value) })} suffix="h" hint="job" />
+          <NumericInput label="Custos adicionais" value={String(form.additional_cost)} onChange={(value) => setForm({ ...form, additional_cost: parseLocaleNumber(value) })} prefix="R$" hint="extra" />
 
           <label className="block rounded-[28px] border border-white/10 bg-[#0a1228]/78 p-4">
             <span className="mb-2 block text-sm font-medium text-slate-200">Impressora</span>

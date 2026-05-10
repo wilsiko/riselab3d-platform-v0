@@ -1,3 +1,88 @@
 .app-shell {
   min-height: 100vh;
 }
+
+.public-quote-card {
+  border-color: rgba(34, 211, 238, 0.2);
+}
+
+.theme-dark .public-quote-card {
+  background: linear-gradient(180deg, rgba(8, 14, 30, 0.96), rgba(7, 24, 44, 0.96));
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.28);
+}
+
+.theme-light .public-quote-card {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(236, 248, 255, 0.9));
+}
+
+.public-quote-eyebrow,
+.public-quote-price {
+  color: #0f766e;
+}
+
+.public-quote-title,
+.public-quote-value {
+  color: #0f172a;
+}
+
+.public-quote-label,
+.public-quote-copy,
+.public-quote-badge-copy {
+  color: #475569;
+}
+
+.public-quote-total {
+  border-color: rgba(203, 213, 225, 0.8);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.public-quote-badge {
+  border-color: #99f6e4;
+  background: #f0fdfa;
+}
+
+.public-quote-secondary-action {
+  border-color: #cbd5e1;
+  background: #ffffff;
+  color: #1e293b;
+}
+
+.public-quote-secondary-action:hover {
+  background: #f8fafc;
+}
+
+.theme-dark .public-quote-eyebrow,
+.theme-dark .public-quote-price {
+  color: #5eead4;
+}
+
+.theme-dark .public-quote-title,
+.theme-dark .public-quote-value {
+  color: #f8fafc;
+}
+
+.theme-dark .public-quote-label,
+.theme-dark .public-quote-copy,
+.theme-dark .public-quote-badge-copy {
+  color: #cbd5e1;
+}
+
+.theme-dark .public-quote-total {
+  border-color: rgba(148, 163, 184, 0.24);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.theme-dark .public-quote-badge {
+  border-color: rgba(94, 234, 212, 0.22);
+  background: rgba(94, 234, 212, 0.08);
+}
+
+.theme-dark .public-quote-secondary-action {
+  border-color: rgba(148, 163, 184, 0.24);
+  background: rgba(255, 255, 255, 0.04);
+  color: #e2e8f0;
+}
+
+.theme-dark .public-quote-secondary-action:hover {
+  background: rgba(255, 255, 255, 0.08);
+}

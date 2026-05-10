@@ -12,6 +12,9 @@ model Tenant {
   id      String    @id @default(uuid())
   name    String
   users   User[]
+  sessions AuthSession[]
+  verificationTokens EmailVerificationToken[]
+  clients Client[]
   printers Printer[]
   filaments Filament[]
   settings GlobalSettings?
@@ -19,12 +22,62 @@ model Tenant {
   quotes   Quote[]
 }
 
+model Client {
+  id        String   @id @default(uuid())
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  tenantId   String
+  name       String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
+
+  @@index([tenantId])
+  @@index([name])
+  @@unique([tenantId, name])
+}
+
 model User {
-  id        String @id @default(uuid())
-  tenant    Tenant @relation(fields: [tenantId], references: [id])
+  id              String   @id @default(uuid())
+  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+  tenantId        String
+  email           String   @unique
+  password        String   @default("")
+  name            String?
+  googleId        String?  @unique
+  emailVerifiedAt DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
+  sessions        AuthSession[]
+  verificationTokens EmailVerificationToken[]
+}
+
+model AuthSession {
+  id        String   @id @default(uuid())
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
   tenantId  String
-  email     String @unique
-  password  String
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([tenantId])
+  @@index([expiresAt])
+}
+
+model EmailVerificationToken {
+  id        String   @id @default(uuid())
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  tenantId  String
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([tenantId])
+  @@index([expiresAt])
 }
 
 model Printer {
@@ -66,6 +119,9 @@ model GlobalSettings {
   tenant   Tenant  @relation(fields: [tenantId], references: [id])
   tenantId String  @unique
   custo_kwh Float
+  direct_margin_percent Float @default(20)
+  ecommerce_margin_percent Float @default(35)
+  end_customer_margin_percent Float @default(50)
 }
 
 model Product {
@@ -103,6 +159,8 @@ model Quote {
   subtotal_custo Float     @default(0)
   margem_percentual Float  @default(0)
   valor_total  Float
+  publicShareToken String? @unique
+  publicSharedAt DateTime?
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @default(now()) @updatedAt
   items        QuoteItem[]

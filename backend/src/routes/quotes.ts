@@ -1,8 +1,10 @@
 import { Router } from 'express';
 import PDFDocument from 'pdfkit';
+import { createOpaqueToken, getBaseUrl, getFrontendBaseUrl } from '../auth/utils';
 import { prisma } from '../prisma';
 import { calculateProductCosts } from '../services/cost';
 import { withFallback, mockData } from '../utils/dbFallback';
+import { requireAuth } from '../middleware/auth';
 
 const router = Router();
 
@@ -13,6 +15,10 @@ const SALE_CHANNEL_LABELS: Record<string, string> = {
 };
 
 router.get('/', async (req, res) => {
+  if (!req.authUser) {
+    return requireAuth(req, res, () => undefined);
+  }
+
   const quotes = await withFallback(
     () =>
       prisma.quote.findMany({
@@ -26,8 +32,13 @@ router.get('/', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
+  if (!req.authUser) {
+    return requireAuth(req, res, () => undefined);
+  }
+
   try {
     const { nome_cliente, data, items, notes, sale_channel, subtotal_custo, margem_percentual } = req.body;
+    const normalizedClientName = typeof nome_cliente === 'string' && nome_cliente.trim() ? nome_cliente.trim() : 'Cliente nao informado';
 
     if (!Array.isArray(items) || !items.length) {
       return res.status(400).json({ error: 'Envie pelo menos um item para salvar a cotacao.' });
@@ -41,25 +52,29 @@ router.post('/', async (req, res) => {
       items.map(async (item: any) => {
         if (!item.productId) {
           const printer = await prisma.printer.findFirst({ where: { id: item.printerId, tenantId: req.tenantId } });
-          const defaultFilament = await prisma.filament.findFirst({ where: { tenantId: req.tenantId } });
 
           if (!printer) {
             throw new Error('Impressora nao encontrada para a cotacao informada.');
           }
 
-          if (!defaultFilament) {
-            throw new Error('Nenhum material padrao foi encontrado para calcular a cotacao.');
-          }
-
           const quantidade = Number(item.quantidade);
           const materialWeightGrams = Number(item.materialWeightGrams);
+          const filamentCostPerKg = Number(item.filamentCostPerKg);
           const printHours = Number(item.printHours);
           const productName = typeof item.productName === 'string' && item.productName.trim() ? item.productName.trim() : 'Cotacao manual';
+          const resolvedFilamentCostPerKg = Number.isFinite(filamentCostPerKg) && filamentCostPerKg > 0 ? filamentCostPerKg : 0;
+          const filamentForQuote = {
+            id: 'manual-filament',
+            tenantId: req.tenantId,
+            marca: 'Manual',
+            tipo: 'Preco informado',
+            custo_por_kg: resolvedFilamentCostPerKg,
+          };
           const costData = calculateProductCosts(
             materialWeightGrams,
             printHours,
             printer,
-            defaultFilament,
+            filamentForQuote,
             settings?.custo_kwh ?? 0,
             0,
           );
@@ -73,7 +88,7 @@ router.post('/', async (req, res) => {
             preco_unitario: precoUnitario,
             snapshot_nome: productName,
             snapshot_sku: `MANUAL-${productName}`,
-            snapshot_material: `${materialWeightGrams} g - ${printHours} h - ${defaultFilament.marca} ${defaultFilament.tipo}`,
+            snapshot_material: `${materialWeightGrams} g - ${printHours} h - preco manual por kg`,
             custo_base_unitario: costData.custoTotal,
             subtotal_custo: subtotalCusto,
             subtotal_preco: subtotalPreco,
@@ -108,10 +123,31 @@ router.post('/', async (req, res) => {
     const subtotalCalculado = quoteItems.reduce((sum, item) => sum + (item.subtotal_custo || 0), 0);
     const valor_total = quoteItems.reduce((sum, item) => sum + item.quantidade * item.preco_unitario, 0);
 
+    if (normalizedClientName !== 'Cliente nao informado') {
+      const existingClient = await prisma.client.findFirst({
+        where: {
+          tenantId: req.tenantId,
+          name: {
+            equals: normalizedClientName,
+            mode: 'insensitive',
+          },
+        },
+      });
+
+      if (!existingClient) {
+        await prisma.client.create({
+          data: {
+            tenantId: req.tenantId,
+            name: normalizedClientName,
+          },
+        });
+      }
+    }
+
     const quote = await prisma.quote.create({
       data: {
         tenantId: req.tenantId,
-        nome_cliente: typeof nome_cliente === 'string' && nome_cliente.trim() ? nome_cliente.trim() : 'Cliente nao informado',
+        nome_cliente: normalizedClientName,
         data: new Date(data),
         notes: typeof notes === 'string' ? notes : null,
         sale_channel: normalizedSaleChannel,
@@ -132,7 +168,79 @@ router.post('/', async (req, res) => {
   }
 });
 
+router.post('/:id/share', async (req, res) => {
+  if (!req.authUser) {
+    return requireAuth(req, res, () => undefined);
+  }
+
+  const { id } = req.params;
+  const existingQuote = await prisma.quote.findFirst({
+    where: { id, tenantId: req.tenantId },
+  });
+
+  if (!existingQuote) {
+    return res.status(404).json({ error: 'Cotacao nao encontrada para gerar link publico.' });
+  }
+
+  const publicShareToken = existingQuote.publicShareToken || createOpaqueToken();
+  const quote = existingQuote.publicShareToken
+    ? existingQuote
+    : await prisma.quote.update({
+        where: { id: existingQuote.id },
+        data: {
+          publicShareToken,
+          publicSharedAt: new Date(),
+        },
+      });
+
+  res.json({
+    quoteId: quote.id,
+    shareUrl: `${getFrontendBaseUrl(req)}/shared/quotes/${publicShareToken}`,
+  });
+});
+
+router.get('/:id', async (req, res) => {
+  if (!req.authUser) {
+    return requireAuth(req, res, () => undefined);
+  }
+
+  const { id } = req.params;
+  const quote = await prisma.quote.findFirst({
+    where: { id, tenantId: req.tenantId },
+    include: { items: { include: { product: true } } },
+  });
+
+  if (!quote) {
+    return res.status(404).json({ error: 'Cotacao nao encontrada.' });
+  }
+
+  res.json(quote);
+});
+
+router.get('/public/:token', async (req, res) => {
+  const token = typeof req.params.token === 'string' ? req.params.token : '';
+
+  if (!token) {
+    return res.status(400).json({ error: 'Token publico da cotacao nao informado.' });
+  }
+
+  const quote = await prisma.quote.findFirst({
+    where: { publicShareToken: token },
+    include: { items: { include: { product: true } } },
+  });
+
+  if (!quote) {
+    return res.status(404).json({ error: 'Cotacao publica nao encontrada.' });
+  }
+
+  res.json(quote);
+});
+
 router.get('/:id/pdf', async (req, res) => {
+  if (!req.authUser) {
+    return requireAuth(req, res, () => undefined);
+  }
+
   const { id } = req.params;
   const quote = await prisma.quote.findFirst({
     where: { id, tenantId: req.tenantId },

@@ -15,6 +15,16 @@ export interface Filament {
 
 export interface Settings {
   custo_kwh: number;
+  direct_margin_percent: number;
+  ecommerce_margin_percent: number;
+  end_customer_margin_percent: number;
+}
+
+export interface Client {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Product {
@@ -40,11 +50,14 @@ export interface Quote {
   id: string;
   nome_cliente: string;
   data: string;
+  createdAt: string;
+  updatedAt: string;
   notes?: string | null;
   sale_channel?: string;
   subtotal_custo?: number;
   margem_percentual?: number;
   valor_total: number;
+  publicShareToken?: string | null;
   items: Array<{
     product?: Product | null;
     quantidade: number;
@@ -56,4 +69,12 @@ export interface Quote {
     subtotal_custo?: number | null;
     subtotal_preco?: number | null;
   }>;
+}
+
+export interface AuthUser {
+  id: string;
+  tenantId: string;
+  email: string;
+  name: string | null;
+  emailVerified: boolean;
 }

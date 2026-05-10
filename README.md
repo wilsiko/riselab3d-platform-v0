@@ -36,10 +36,27 @@ Plataforma SaaS para gestão de impressão 3D com cálculo de custos, geração 
 
 ### Usando Docker (Recomendado)
 ```bash
-docker-compose up --build
+export RESEND_API_KEY="sua-chave-resend"
+export GOOGLE_CLIENT_ID="seu-client-id-google"
+export VITE_GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID"
+docker compose up --build
 # Frontend: http://localhost:5173
 # Backend: http://localhost:4000
 ```
+
+### Variaveis de autenticacao
+
+Backend:
+- `PUBLIC_TENANT_ID`: tenant publico usado no modo visitante. Default `tenant_1`.
+- `APP_BASE_URL`: URL do backend usada para gerar links de verificacao. Ex.: `http://localhost:4000`.
+- `FRONTEND_URL`: rota de retorno apos verificar o e-mail. Ex.: `http://localhost:5173/login`.
+- `GOOGLE_CLIENT_ID`: client id do Google OAuth.
+- `RESEND_API_KEY`: chave da conta Resend usada para envio dos e-mails.
+- `RESEND_FROM_EMAIL`: remetente verificado no Resend.
+
+Frontend:
+- `VITE_GOOGLE_CLIENT_ID`: mesmo client id do Google usado pelo backend.
+- `VITE_PUBLIC_TENANT_ID`: tenant publico para navegacao anônima. Default `tenant_1`.
 
 ### Usando npm
 
@@ -66,6 +83,13 @@ npm run dev
 ## 📋 Endpoints Principais
 
 ```
+POST   /api/auth/register      # Cria conta e envia verificacao por e-mail
+POST   /api/auth/login         # Login com e-mail e senha verificada
+POST   /api/auth/google        # Login/cadastro com Google OAuth
+GET    /api/auth/me            # Sessao atual
+GET    /api/auth/verify-email  # Consome token de verificacao por link
+POST   /api/auth/logout        # Encerra sessao
+
 GET    /api/dashboard           # Resumo geral (produtos, orçamentos, etc)
 GET    /api/health              # Health check
 
@@ -77,14 +101,17 @@ PUT    /api/settings            # Atualizar configurações
 POST   /api/products            # Criar SKU com cálculo automático
 GET    /api/products            # Listar produtos
 
-POST   /api/quotes              # Criar orçamento
-GET    /api/quotes              # Listar orçamentos
+POST   /api/quotes              # Criar orçamento (requer login)
+GET    /api/quotes              # Listar orçamentos salvos (requer login)
 GET    /api/quotes/:id/pdf      # Exportar PDF profissional
 ```
 
 ## 🔒 Segurança
 
 - **Rate Limiting**: 100 requisições/minuto por IP + tenant
+- **Sessão em cookie HTTP-only**: autenticação persistente sem expor token ao frontend
+- **Verificacao de e-mail**: login por senha exige confirmação prévia
+- **Google OAuth**: onboarding sem senha para contas Google
 - **Validação**: Backend + Frontend com mensagens específicas
 - **Índices DB**: Queries otimizadas para performance
 - **Tipagem Strict**: TypeScript em modo strict
@@ -93,7 +120,7 @@ GET    /api/quotes/:id/pdf      # Exportar PDF profissional
 
 O backend inclui dados fake para testes:
 - 1 tenant (`tenant_1`)
-- 1 usuário demo (admin@riselab3d.com)
+- 1 usuário demo (`admin@riselab3d.com` / `changeme123`)
 - 1 impressora (Ender 3 Pro)
 - 1 filamento (Prusa PLA)
 - 1 configuração global (custo kWh)
@@ -106,6 +133,12 @@ npm run seed
 ```
 
 ## 💡 Exemplo de Uso
+
+### 0. Fluxo de acesso
+
+- Visitante pode navegar, simular custos e consultar a estrutura pública.
+- Usuário autenticado ganha tenant próprio, pode salvar cotações, ver histórico e alterar configurações.
+- Cadastro por e-mail envia um link de verificação via Resend.
 
 ### 1. Criar Impressora
 ```bash
@@ -200,9 +233,11 @@ Veja [IMPROVEMENTS.md](./IMPROVEMENTS.md) para detalhes completos sobre:
 ## 🔮 Próximas Fases (Roadmap)
 
 ### Fase 2: Autenticação & Billing
-- [ ] Autenticação real com JWT
+- [x] Autenticação com sessão, Google OAuth e verificação por e-mail
 - [ ] Integração com Stripe
-- [ ] Planos de subscriçãoFase 3: Deploy Produção
+- [ ] Planos de subscrição
+
+### Fase 3: Deploy Produção
 - [ ] CI/CD com GitHub Actions
 - [ ] Deploy em Railway/Render
 - [ ] Banco MySQL managed
