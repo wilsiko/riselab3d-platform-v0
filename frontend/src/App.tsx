@@ -118,7 +118,7 @@ function App() {
                   className={({ isActive }) =>
                     `inline-flex items-center rounded-2xl border px-4 py-2.5 text-sm font-semibold transition ${
                       isActive
-                        ? 'border-amber-300/35 bg-amber-50 text-slate-950 shadow-[0_12px_28px_rgba(251,191,36,0.22)]'
+                        ? 'brand-primary-active'
                         : 'border-cyan-400/20 bg-cyan-400/[0.08] text-cyan-200 hover:border-cyan-300/35 hover:bg-cyan-400/[0.14] hover:text-white'
                     }`
                   }

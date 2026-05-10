@@ -1381,18 +1381,6 @@ export default function Quotes() {
               </div>
             ) : null}
 
-            <div className="mt-6">
-              <QuoteErrorRateSummary
-                summary={{
-                  productName: draft.productName,
-                  unitCost: unitProductCost,
-                  errorRatePercent: settings.error_rate_percent,
-                  technicalBaseCostPerUnit,
-                  failureCostPerUnit,
-                }}
-              />
-            </div>
-
             <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-2">
               <PricingCard
                 label="Custo do produto (unidade)"
