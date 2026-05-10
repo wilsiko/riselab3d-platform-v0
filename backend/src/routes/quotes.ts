@@ -49,6 +49,7 @@ router.post('/', async (req, res) => {
         const quantidade = Number(item.quantidade);
         const materialWeightGrams = Number(item.materialWeightGrams);
         const printHours = Number(item.printHours);
+        const productName = typeof item.productName === 'string' && item.productName.trim() ? item.productName.trim() : 'Cotacao manual';
         const costData = calculateProductCosts(
           materialWeightGrams,
           printHours,
@@ -65,8 +66,8 @@ router.post('/', async (req, res) => {
           productId: null,
           quantidade,
           preco_unitario: precoUnitario,
-          snapshot_nome: 'Cotacao manual',
-          snapshot_sku: `MANUAL-${printer.nome}`,
+          snapshot_nome: productName,
+          snapshot_sku: `MANUAL-${productName}`,
           snapshot_material: `${materialWeightGrams} g • ${printHours} h • ${defaultFilament.marca} ${defaultFilament.tipo}`,
           custo_base_unitario: costData.custoTotal,
           subtotal_custo: subtotalCusto,

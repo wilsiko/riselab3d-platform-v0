@@ -12,6 +12,7 @@ import { Filament, Printer, Quote, Settings } from '../types';
 const QUOTE_DRAFT_STORAGE_KEY = 'riselab3d.quote-draft';
 
 interface QuoteDraft {
+  productName: string;
   clientName: string;
   date: string;
   notes: string;
@@ -26,6 +27,7 @@ interface QuoteDraft {
 
 function getDefaultDraft(): QuoteDraft {
   return {
+    productName: '',
     clientName: '',
     date: new Date().toISOString().substring(0, 10),
     notes: '',
@@ -81,7 +83,6 @@ export default function Quotes() {
   const [settings, setSettings] = useState<Settings>({ custo_kwh: 0 });
   const [draft, setDraft] = useState<QuoteDraft>(() => loadDraft());
   const [isLoading, setIsLoading] = useState(false);
-  const [showAdvancedCosts, setShowAdvancedCosts] = useState(false);
   const [lastSavedQuoteId, setLastSavedQuoteId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -149,7 +150,7 @@ export default function Quotes() {
   const netProfit = roundCurrency(suggestedPrice - productionCost);
   const averageUnitPrice = totalQuantity ? suggestedPrice / totalQuantity : 0;
   const recentQuotes = quotes.slice(0, 4);
-  const canSubmit = Boolean(draft.clientName.trim()) && Boolean(draft.date) && Boolean(draft.printerId) && materialWeightGrams > 0 && printHours > 0 && quantity > 0 && suggestedPrice > 0 && Boolean(defaultMaterial);
+  const canSubmit = Boolean(draft.productName.trim()) && Boolean(draft.clientName.trim()) && Boolean(draft.date) && Boolean(draft.printerId) && materialWeightGrams > 0 && printHours > 0 && quantity > 0 && suggestedPrice > 0 && Boolean(defaultMaterial);
 
   function updateDraft(partial: Partial<QuoteDraft>) {
     setDraft((currentDraft) => ({ ...currentDraft, ...partial }));
@@ -184,6 +185,7 @@ export default function Quotes() {
 
     setDraft({
       ...getDefaultDraft(),
+      productName: firstItem?.snapshot_nome || '',
       clientName: quote.nome_cliente,
       saleChannel: (quote.sale_channel as SaleChannel) || 'direct',
       printerId: manualMetadata?.printerId || firstItemProduct?.printer.id || '',
@@ -209,7 +211,7 @@ export default function Quotes() {
     setSuccess(null);
 
     if (!canSubmit) {
-      setError('Defina cliente, itens validos e um preco final antes de salvar a cotacao.');
+      setError('Defina produto, cliente, itens validos e um preco final antes de salvar a cotacao.');
       return;
     }
 
@@ -218,6 +220,7 @@ export default function Quotes() {
     const unitPrice = Number((targetTotal / quantity).toFixed(4));
     const payloadItems = [
       {
+        productName: draft.productName.trim(),
         printerId: draft.printerId,
         materialWeightGrams,
         printHours,
@@ -227,6 +230,7 @@ export default function Quotes() {
     ];
 
     const manualMetadata = {
+      productName: draft.productName.trim(),
       printerId: draft.printerId,
       materialWeightGrams,
       printHours,
@@ -279,10 +283,34 @@ export default function Quotes() {
           <section className="rounded-[34px] border border-white/10 bg-white/[0.035] p-5 shadow-[0_24px_90px_rgba(0,0,0,0.24)] backdrop-blur-2xl sm:p-6">
             <div className="border-b border-white/10 pb-5">
               <h2 className="text-xl font-semibold tracking-[-0.04em] text-white">Produto</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-400">Informe peso, tempo e quantidade, depois selecione a impressora usada na producao.</p>
+              <p className="mt-2 text-sm leading-6 text-slate-400">Informe produto, cliente, peso, tempo e quantidade, depois selecione a impressora usada na producao.</p>
             </div>
 
             <div className="mt-6 space-y-5">
+              <div className="grid gap-4 xl:grid-cols-2">
+                <label className="block rounded-[28px] border border-white/10 bg-[#0a1228]/85 p-4 shadow-[0_16px_50px_rgba(0,0,0,0.18)]">
+                  <span className="block text-sm font-medium text-slate-200">Nome do produto</span>
+                  <input
+                    value={draft.productName}
+                    onChange={(event) => updateDraft({ productName: event.target.value })}
+                    placeholder="Ex: Suporte de celular"
+                    className="mt-4 min-h-[60px] w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 text-base font-semibold text-white outline-none transition focus:border-cyan-400/40 focus:bg-cyan-400/[0.05]"
+                    required
+                  />
+                </label>
+
+                <label className="block rounded-[28px] border border-white/10 bg-[#0a1228]/85 p-4 shadow-[0_16px_50px_rgba(0,0,0,0.18)]">
+                  <span className="block text-sm font-medium text-slate-200">Cliente</span>
+                  <input
+                    value={draft.clientName}
+                    onChange={(event) => updateDraft({ clientName: event.target.value })}
+                    placeholder="Ex: Studio Atlas"
+                    className="mt-4 min-h-[60px] w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 text-base font-semibold text-white outline-none transition focus:border-cyan-400/40 focus:bg-cyan-400/[0.05]"
+                    required
+                  />
+                </label>
+              </div>
+
               <div className="grid gap-4 xl:grid-cols-3">
                 <NumericInput label="Peso" value={draft.materialWeightGrams} onChange={(materialWeightGramsValue) => updateDraft({ materialWeightGrams: materialWeightGramsValue })} suffix="g" hint="material" />
                 <NumericInput label="Tempo" value={draft.printHours} onChange={(printHoursValue) => updateDraft({ printHours: printHoursValue })} suffix="h" hint="horas" />
@@ -342,11 +370,11 @@ export default function Quotes() {
                   const isSelected = draft.saleChannel === channel.id;
 
                   return (
-                    <div key={channel.id}>
+                    <div key={channel.id} className="w-full">
                       <button
                         type="button"
                         onClick={() => updateDraft({ saleChannel: channel.id })}
-                        className={`flex min-h-[60px] flex-1 items-center justify-between rounded-2xl border px-4 py-3 text-left transition ${
+                        className={`flex min-h-[60px] w-full items-center justify-between rounded-2xl border px-4 py-3 text-left transition ${
                           isSelected ? 'border-cyan-400/35 bg-cyan-400/[0.08]' : 'border-white/10 bg-white/[0.04] hover:bg-white/[0.08]'
                         }`}
                       >
@@ -359,58 +387,6 @@ export default function Quotes() {
                   );
                 })}
               </div>
-            </div>
-
-            <div className="mt-6 rounded-[30px] border border-white/10 bg-[#0a1228]/78 p-5">
-              <button
-                type="button"
-                onClick={() => setShowAdvancedCosts((currentValue) => !currentValue)}
-                className="flex w-full items-center justify-between gap-4 text-left"
-              >
-                <div>
-                  <p className="text-sm font-medium text-white">Exibicao progressiva</p>
-                  <p className="mt-1 text-sm text-slate-400">Abra contexto comercial detalhado apenas quando precisar.</p>
-                </div>
-                <span className="rounded-full bg-white/[0.08] px-3 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
-                  {showAdvancedCosts ? 'Ocultar' : 'Expandir'}
-                </span>
-              </button>
-
-              {showAdvancedCosts ? (
-                <div className="mt-5 grid gap-4">
-                  <label className="block">
-                    <span className="mb-2 block text-sm font-medium text-slate-200">Cliente</span>
-                    <input
-                      value={draft.clientName}
-                      onChange={(event) => updateDraft({ clientName: event.target.value })}
-                      placeholder="Ex: Studio Atlas"
-                      className="w-full rounded-2xl border border-white/10 bg-[#081120] p-3 text-white"
-                      required
-                    />
-                  </label>
-
-                  <label className="block">
-                    <span className="mb-2 block text-sm font-medium text-slate-200">Data</span>
-                    <input
-                      type="date"
-                      value={draft.date}
-                      onChange={(event) => updateDraft({ date: event.target.value })}
-                      className="w-full rounded-2xl border border-white/10 bg-[#081120] p-3 text-white"
-                      required
-                    />
-                  </label>
-
-                  <label className="block">
-                    <span className="mb-2 block text-sm font-medium text-slate-200">Notas da proposta</span>
-                    <textarea
-                      value={draft.notes}
-                      onChange={(event) => updateDraft({ notes: event.target.value })}
-                      placeholder="Detalhes comerciais, prazo ou observacoes para a equipe."
-                      className="min-h-28 w-full rounded-2xl border border-white/10 bg-[#081120] p-3 text-white"
-                    />
-                  </label>
-                </div>
-              ) : null}
             </div>
           </section>
 
