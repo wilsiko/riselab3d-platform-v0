@@ -1,669 +1,1440 @@
-import { useEffect, useState, FormEvent } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { createPortal } from 'react-dom';
 import api from '../api';
-import { Printer, Product, Quote, QuoteSaleType, Settings } from '../types';
-import { Loading } from '../components/Loading';
+import { useAuth } from '../auth/AuthContext';
 import { Alert } from '../components/Alert';
-import { Pagination } from '../components/Pagination';
-import { formatCurrency, formatDecimalInput, parseDecimalInput, parseNumberInputValue } from '../utils/numberFormat';
+import { useAuthRedirect } from '../hooks/useAuthRedirect';
+import { Loading } from '../components/Loading';
+import { NumericInput } from '../components/NumericInput';
+import { PricingCard } from '../components/PricingCard';
+import { PrinterSelector } from '../components/PrinterSelector';
+import { getSaleChannel, getSaleChannels, SaleChannel } from '../constants/pricing';
+import { Client, Printer, Quote, Settings } from '../types';
+import { parseLocaleNumber } from '../utils/number';
 
-const ITEMS_PER_PAGE = 5;
+const QUOTE_DRAFT_STORAGE_KEY = 'riselab3d.quote-draft';
 
-interface QuoteItemLine {
-  productId: string;
+interface QuoteDraft {
+  productName: string;
+  clientName: string;
+  date: string;
+  notes: string;
+  saleChannel: SaleChannel;
   printerId: string;
-  quantidade: number | '';
-  preco_unitario: string;
+  materialWeightGrams: string;
+  filamentCostPerKg: string;
+  printHours: string;
+  quantity: string;
+  laborCost: string;
+  packagingCost: string;
 }
 
-const SALE_TYPE_OPTIONS: Array<{ value: QuoteSaleType; label: string }> = [
-  { value: 'venda_direta', label: 'Venda Direta' },
-  { value: 'ecommerce', label: 'E-commerce' },
-  { value: 'consumidor_final', label: 'Usuario Final' },
-];
+type QuoteFieldName = 'productName' | 'materialWeightGrams' | 'filamentCostPerKg' | 'printHours' | 'quantity' | 'printerId';
+type QuoteFieldErrors = Partial<Record<QuoteFieldName, string>>;
 
-function saleTypeBadgeClass(saleType: QuoteSaleType) {
-  if (saleType === 'venda_direta') {
-    return 'border-emerald-200 bg-emerald-50 text-emerald-800';
-  }
-
-  if (saleType === 'ecommerce') {
-    return 'border-amber-200 bg-amber-50 text-amber-800';
-  }
-
-  return 'border-cyan-200 bg-cyan-50 text-cyan-800';
+interface ShareQuoteResponse {
+  quoteId: string;
+  shareUrl: string;
 }
 
-function calculateQuoteUnitPrice(product: Product, printer: Printer, custoKwh: number) {
-  const custoEnergia = (printer.consumo_watts / 1000) * product.tempo_impressao_horas * custoKwh;
-  const custoAmortizacao = (printer.custo_aquisicao / printer.vida_util_horas) * product.tempo_impressao_horas;
-  const subtotal = product.custo_material + custoEnergia + custoAmortizacao + product.custo_adicional;
-  const custoFalhas = subtotal * (product.falha_percentual / 100);
-
-  return subtotal + custoFalhas;
+interface ManualQuoteMetadata {
+  productName?: string;
+  printerId?: string;
+  materialWeightGrams?: number;
+  filamentCostPerKg?: number;
+  printHours?: number;
+  quantity?: number;
 }
 
-function resolveMarginPercent(saleType: QuoteSaleType | '', settings: Settings) {
-  if (saleType === 'venda_direta') {
-    return settings.margem_venda_direta;
-  }
-
-  if (saleType === 'ecommerce') {
-    return settings.margem_venda_ecommerce;
-  }
-
-  if (saleType === 'consumidor_final') {
-    return settings.margem_venda_consumidor_final;
-  }
-
-  return null;
+function getCurrentQuoteDate() {
+  return new Date().toISOString().substring(0, 10);
 }
 
-function applyMargin(value: number, marginPercent: number) {
-  return value * (1 + marginPercent / 100);
+function formatQuoteDate(value: string) {
+  const [year, month, day] = value.split('-').map(Number);
+
+  if (!year || !month || !day) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat('pt-BR').format(new Date(year, month - 1, day));
 }
+
+function formatQuoteTimestamp(value: string) {
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).format(new Date(value));
+}
+
+function getDefaultDraft(): QuoteDraft {
+  return {
+    productName: '',
+    clientName: '',
+    date: getCurrentQuoteDate(),
+    notes: '',
+    saleChannel: 'direct',
+    printerId: '',
+    materialWeightGrams: '',
+    filamentCostPerKg: '',
+    printHours: '',
+    quantity: '1',
+    laborCost: '0',
+    packagingCost: '0',
+  };
+}
+
+function loadDraft(): QuoteDraft {
+  return getDefaultDraft();
+}
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+}
+
+function ChannelIcon({ channelId }: { channelId: string }) {
+  if (channelId === 'direct') {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-3.5 w-3.5" aria-hidden="true">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 12h16M13 5l7 7-7 7" />
+      </svg>
+    );
+  }
+
+  if (channelId === 'ecommerce') {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-3.5 w-3.5" aria-hidden="true">
+        <circle cx="9" cy="19" r="1.5" />
+        <circle cx="17" cy="19" r="1.5" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3 5h2l2.4 9.2a1 1 0 0 0 1 .8h8.8a1 1 0 0 0 1-.76L20 8H7" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-3.5 w-3.5" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 21s-6-4.35-6-10a3.75 3.75 0 0 1 6-2.98A3.75 3.75 0 0 1 18 11c0 5.65-6 10-6 10Z" />
+    </svg>
+  );
+}
+
+function renderChannelPriceBadges(unitCost: number | null, saleChannels: ReturnType<typeof getSaleChannels>) {
+  if (unitCost === null) {
+    return (
+      <span className="text-sm text-slate-500">Valores nao informados</span>
+    );
+  }
+
+  return saleChannels.map((channel) => {
+    const salePrice = unitCost * (1 + channel.marginPercent / 100);
+
+    return (
+      <span
+        key={channel.id}
+        title={channel.label}
+        aria-label={`${channel.label}: ${formatCurrency(salePrice)}`}
+        className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-sm text-slate-300"
+      >
+        <span className="text-cyan-200">
+          <ChannelIcon channelId={channel.id} />
+        </span>
+        <span className="font-medium text-slate-200">{formatCurrency(salePrice)}</span>
+      </span>
+    );
+  });
+}
+
+function parseDecimal(value: string) {
+  return parseLocaleNumber(value);
+}
+
+function parseDurationHours(value: string) {
+  const normalizedValue = value.trim();
+
+  if (!normalizedValue) {
+    return 0;
+  }
+
+  if (/^\d+([\.,]\d+)?$/.test(normalizedValue)) {
+    return parseDecimal(normalizedValue);
+  }
+
+  const parts = normalizedValue.split(':');
+
+  if (![2, 3].includes(parts.length) || parts.some((part) => !/^\d+$/.test(part))) {
+    return 0;
+  }
+
+  const numericParts = parts.map(Number);
+  const [hoursPart, minutesPart, secondsPart] = parts.length === 2
+    ? [0, numericParts[0], numericParts[1]]
+    : numericParts;
+
+  if (minutesPart >= 60 || secondsPart >= 60) {
+    return 0;
+  }
+
+  return hoursPart + minutesPart / 60 + secondsPart / 3600;
+}
+
+function roundCurrency(value: number) {
+  return Number(value.toFixed(2));
+}
+
+function formatDurationFromHours(value: number) {
+  if (!Number.isFinite(value) || value <= 0) {
+    return '';
+  }
+
+  const totalSeconds = Math.round(value * 3600);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return [hours, minutes, seconds].map((part) => String(part).padStart(2, '0')).join(':');
+  }
+
+  return [minutes, seconds].map((part) => String(part).padStart(2, '0')).join(':');
+}
+
+function getDraftSignature(draft: QuoteDraft) {
+  return JSON.stringify({
+    productName: draft.productName.trim(),
+    clientName: draft.clientName.trim(),
+    date: draft.date,
+    saleChannel: draft.saleChannel,
+    printerId: draft.printerId,
+    materialWeightGrams: draft.materialWeightGrams.trim(),
+    filamentCostPerKg: draft.filamentCostPerKg.trim(),
+    printHours: draft.printHours.trim(),
+    quantity: draft.quantity.trim(),
+    laborCost: draft.laborCost.trim(),
+    packagingCost: draft.packagingCost.trim(),
+    notes: draft.notes.trim(),
+  });
+}
+
+function extractManualQuoteMetadata(notes?: string | null): ManualQuoteMetadata | null {
+  if (!notes) {
+    return null;
+  }
+
+  const metadataLine = notes
+    .split('\n')
+    .find((line) => line.startsWith('__RL3D_MANUAL__'));
+
+  if (!metadataLine) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(metadataLine.replace('__RL3D_MANUAL__', '')) as ManualQuoteMetadata;
+  } catch {
+    return null;
+  }
+}
+
+function getSaleChannelFromQuote(value?: string): SaleChannel {
+  if (value === 'ecommerce' || value === 'end_customer' || value === 'direct') {
+    return value;
+  }
+
+  return 'direct';
+}
+
+function buildDraftFromQuote(quote: Quote): QuoteDraft | null {
+  const metadata = extractManualQuoteMetadata(quote.notes);
+  const primaryItem = quote.items[0];
+
+  if (!primaryItem) {
+    return null;
+  }
+
+  return {
+    productName: metadata?.productName || primaryItem.snapshot_nome || primaryItem.product?.nome || '',
+    clientName: quote.nome_cliente === 'Cliente nao informado' ? '' : quote.nome_cliente,
+    date: typeof quote.data === 'string' ? quote.data.substring(0, 10) : getCurrentQuoteDate(),
+    notes: '',
+    saleChannel: getSaleChannelFromQuote(quote.sale_channel),
+    printerId: metadata?.printerId || '',
+    materialWeightGrams: metadata?.materialWeightGrams ? String(metadata.materialWeightGrams) : '',
+    filamentCostPerKg: metadata?.filamentCostPerKg ? String(metadata.filamentCostPerKg) : '',
+    printHours: metadata?.printHours ? formatDurationFromHours(metadata.printHours) : '',
+    quantity: metadata?.quantity ? String(metadata.quantity) : String(primaryItem.quantidade || 1),
+    laborCost: '0',
+    packagingCost: '0',
+  };
+}
+
+function getQuotePrimarySummary(quote: Quote) {
+  const primaryItem = quote.items[0];
+  const productName = primaryItem?.snapshot_nome || primaryItem?.product?.nome || 'Item sem titulo';
+  const totalQuantity = quote.items.reduce((sum, item) => sum + item.quantidade, 0);
+  const unitCost = primaryItem?.custo_base_unitario
+    ?? (typeof primaryItem?.subtotal_custo === 'number' && primaryItem.quantidade > 0 ? primaryItem.subtotal_custo / primaryItem.quantidade : null)
+    ?? (typeof quote.subtotal_custo === 'number' && totalQuantity > 0 ? quote.subtotal_custo / totalQuantity : null);
+
+  return {
+    productName,
+    unitCost,
+  };
+}
+
+const sectionTitleClassName = 'text-[28px] font-semibold tracking-[-0.04em] text-white';
+const sectionDescriptionClassName = 'mt-2 text-sm leading-6 text-slate-400';
+const mainPanelClassName = 'rounded-[34px] border border-white/10 bg-white/[0.035] p-5 shadow-[0_24px_90px_rgba(0,0,0,0.24)] backdrop-blur-2xl sm:p-6 lg:min-h-[760px]';
 
 export default function Quotes() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [printers, setPrinters] = useState<Printer[]>([]);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
+  const redirectToLogin = useAuthRedirect();
+  const [clients, setClients] = useState<Client[]>([]);
   const [quotes, setQuotes] = useState<Quote[]>([]);
-  const [editingQuoteId, setEditingQuoteId] = useState<string | null>(null);
-  const [expandedQuoteId, setExpandedQuoteId] = useState<string | null>(null);
-  const [settings, setSettings] = useState<Settings>({
-    custo_kwh: 0,
-    margem_venda_direta: 20,
-    margem_venda_ecommerce: 35,
-    margem_venda_consumidor_final: 50,
-  });
-  const [currentPage, setCurrentPage] = useState(1);
-  const [clientName, setClientName] = useState('Cliente VIP');
-  const [date, setDate] = useState(new Date().toISOString().substring(0, 10));
-  const [saleType, setSaleType] = useState<QuoteSaleType | ''>('');
-  const [clientFilter, setClientFilter] = useState('');
-  const [startDateFilter, setStartDateFilter] = useState('');
-  const [endDateFilter, setEndDateFilter] = useState('');
-  const [items, setItems] = useState<QuoteItemLine[]>([
-    { productId: '', printerId: '', quantidade: 1, preco_unitario: '0,00' },
-  ]);
-  const [highlightedQuoteId, setHighlightedQuoteId] = useState<string | null>(null);
+  const [printers, setPrinters] = useState<Printer[]>([]);
+  const [settings, setSettings] = useState<Settings>({ custo_kwh: 0, direct_margin_percent: 20, ecommerce_margin_percent: 35, end_customer_margin_percent: 50 });
+  const [draft, setDraft] = useState<QuoteDraft>(() => loadDraft());
   const [isLoading, setIsLoading] = useState(false);
+  const [showQuantityPresets, setShowQuantityPresets] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<QuoteFieldErrors>({});
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-
-  const filteredQuotes = quotes.filter((quote) => {
-    const normalizedClientFilter = clientFilter.trim().toLowerCase();
-    const quoteDate = new Date(quote.data);
-
-    if (normalizedClientFilter && !quote.nome_cliente.toLowerCase().includes(normalizedClientFilter)) {
-      return false;
-    }
-
-    if (startDateFilter) {
-      const startDate = new Date(`${startDateFilter}T00:00:00`);
-
-      if (quoteDate < startDate) {
-        return false;
-      }
-    }
-
-    if (endDateFilter) {
-      const endDate = new Date(`${endDateFilter}T23:59:59`);
-
-      if (quoteDate > endDate) {
-        return false;
-      }
-    }
-
-    return true;
-  });
-
-  const paginatedQuotes = filteredQuotes.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE,
-  );
-  const totalPages = Math.ceil(filteredQuotes.length / ITEMS_PER_PAGE);
-
-  const resetForm = () => {
-    setEditingQuoteId(null);
-    setClientName('Cliente VIP');
-    setDate(new Date().toISOString().substring(0, 10));
-    setSaleType('');
-    setItems([{ productId: '', printerId: '', quantidade: 1, preco_unitario: '0,00' }]);
-  };
+  const [isSharingLink, setIsSharingLink] = useState(false);
+  const [isClientPickerOpen, setIsClientPickerOpen] = useState(false);
+  const [isUnitCostBreakdownOpen, setIsUnitCostBreakdownOpen] = useState(false);
+  const [clientSearch, setClientSearch] = useState('');
+  const [isSavingClient, setIsSavingClient] = useState(false);
+  const [persistedQuote, setPersistedQuote] = useState<Quote | null>(null);
+  const [persistedSignature, setPersistedSignature] = useState<string | null>(null);
+  const [publicShareUrl, setPublicShareUrl] = useState<string | null>(null);
+  const shareToken = useMemo(() => new URLSearchParams(location.search).get('share') || '', [location.search]);
+  const quoteId = useMemo(() => new URLSearchParams(location.search).get('quote') || '', [location.search]);
 
   useEffect(() => {
     const loadData = async () => {
       try {
         setIsLoading(true);
-        const [productsRes, printersRes, settingsRes, quotesRes] = await Promise.all([
-          api.get<Product[]>('/products'),
-          api.get<Printer[]>('/printers'),
+        const [settingsRes, printersRes] = await Promise.all([
           api.get<Settings>('/settings'),
-          api.get<Quote[]>('/quotes'),
+          api.get<Printer[]>('/printers'),
         ]);
-        setProducts(productsRes.data);
-        setPrinters(printersRes.data);
+
         setSettings(settingsRes.data);
-        setQuotes(quotesRes.data);
-      } catch (err: any) {
-        setError(err?.response?.data?.error || 'Erro ao carregar dados');
+        setPrinters(printersRes.data);
+
+        if (isAuthenticated) {
+          const [quotesRes, clientsRes] = await Promise.all([
+            api.get<Quote[]>('/quotes'),
+            api.get<Client[]>('/clients').catch(() => ({ data: [] as Client[] })),
+          ]);
+
+          setQuotes(quotesRes.data);
+          setClients(clientsRes.data);
+        } else {
+          setQuotes([]);
+          setClients([]);
+        }
+      } catch (requestError: any) {
+        setError(requestError?.response?.data?.error || 'Nao foi possivel carregar o espaco de cotacoes.');
       } finally {
         setIsLoading(false);
       }
     };
+
     loadData();
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
-    setCurrentPage(1);
-  }, [clientFilter, startDateFilter, endDateFilter]);
-
-  useEffect(() => {
-    if (!highlightedQuoteId) {
+    if (typeof window === 'undefined') {
       return;
     }
 
-    const timeoutId = window.setTimeout(() => {
-      setHighlightedQuoteId((currentId) => (currentId === highlightedQuoteId ? null : currentId));
-    }, 8000);
+    window.localStorage.removeItem(QUOTE_DRAFT_STORAGE_KEY);
+  }, [draft]);
 
-    return () => window.clearTimeout(timeoutId);
-  }, [highlightedQuoteId]);
+  useEffect(() => {
+    if (shareToken) {
+      navigate(`/shared/quotes/${shareToken}`, { replace: true });
+    }
+  }, [navigate, shareToken]);
 
-  const addItem = () => setItems((prev) => [...prev, { productId: '', printerId: '', quantidade: 1, preco_unitario: '0,00' }]);
-
-  const removeItem = (index: number) => {
-    setItems((prev) => (prev.length === 1 ? prev : prev.filter((_, currentIndex) => currentIndex !== index)));
-  };
-
-  const updateItem = (index: number, partial: Partial<QuoteItemLine>) => {
-    setItems((prev) => prev.map((item, idx) => (idx === index ? { ...item, ...partial } : item)));
-  };
-
-  const buildDisplayUnitPrice = (product: Product | undefined, printer: Printer | undefined) => {
-    if (!product || !printer) {
-      return '0,00';
+  useEffect(() => {
+    if (!shareToken) {
+      return;
     }
 
-    const baseCost = calculateQuoteUnitPrice(product, printer, settings.custo_kwh);
+    let isActive = true;
 
-    return formatDecimalInput(baseCost);
-  };
+    const loadSharedQuote = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
 
-  const selectedMarginPercent = resolveMarginPercent(saleType, settings);
-  const formTotalCost = items.reduce((sum, item) => {
-    const unitPrice = parseDecimalInput(item.preco_unitario) || 0;
-    return sum + Number(item.quantidade || 0) * unitPrice;
-  }, 0);
-  const formTotalSale = selectedMarginPercent === null ? formTotalCost : applyMargin(formTotalCost, selectedMarginPercent);
+        const response = await api.get<Quote>(`/quotes/public/${shareToken}`);
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+        if (!isActive) {
+          return;
+        }
+
+        const nextDraft = buildDraftFromQuote(response.data);
+
+        if (!nextDraft) {
+          setError('Nao foi possivel reconstruir esta cotacao publica.');
+          return;
+        }
+
+        setDraft(nextDraft);
+        setFieldErrors({});
+        setPersistedQuote(response.data);
+        setPersistedSignature(getDraftSignature(nextDraft));
+        setPublicShareUrl(`${window.location.origin}/shared/quotes/${shareToken}`);
+        setSuccess('Cotacao publica carregada na plataforma.');
+      } catch (requestError: any) {
+        if (!isActive) {
+          return;
+        }
+
+        setError(requestError?.response?.data?.error || 'Nao foi possivel abrir a cotacao publica.');
+      } finally {
+        if (isActive) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    loadSharedQuote();
+
+    return () => {
+      isActive = false;
+    };
+  }, [shareToken]);
+
+  useEffect(() => {
+    if (shareToken || !quoteId) {
+      return;
+    }
+
+    if (!isAuthenticated) {
+      redirectToLogin();
+      return;
+    }
+
+    let isActive = true;
+
+    const loadSavedQuote = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+
+        const response = await api.get<Quote>(`/quotes/${quoteId}`);
+
+        if (!isActive) {
+          return;
+        }
+
+        const nextDraft = buildDraftFromQuote(response.data);
+
+        if (!nextDraft) {
+          setError('Nao foi possivel reconstruir esta cotacao salva.');
+          return;
+        }
+
+        setDraft(nextDraft);
+        setFieldErrors({});
+        setPersistedQuote(response.data);
+        setPersistedSignature(getDraftSignature(nextDraft));
+        setPublicShareUrl(response.data.publicShareToken ? `${window.location.origin}/shared/quotes/${response.data.publicShareToken}` : null);
+        setSuccess('Cotacao carregada para revisao. Ao salvar, um novo registro sera criado.');
+      } catch (requestError: any) {
+        if (!isActive) {
+          return;
+        }
+
+        setError(requestError?.response?.data?.error || 'Nao foi possivel abrir esta cotacao salva.');
+      } finally {
+        if (isActive) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    loadSavedQuote();
+
+    return () => {
+      isActive = false;
+    };
+  }, [isAuthenticated, quoteId, redirectToLogin, shareToken]);
+
+  const saleChannels = getSaleChannels(settings);
+  const selectedChannel = getSaleChannel(draft.saleChannel, settings);
+  const selectedPrinter = printers.find((printer) => printer.id === draft.printerId) || null;
+  const materialWeightGrams = parseDecimal(draft.materialWeightGrams);
+  const filamentCostPerKg = parseDecimal(draft.filamentCostPerKg);
+  const printHours = parseDurationHours(draft.printHours);
+  const quantity = Math.max(1, Math.round(parseDecimal(draft.quantity) || 1));
+  const appliedMargin = selectedChannel.marginPercent;
+  const laborCost = parseDecimal(draft.laborCost);
+  const packagingCost = parseDecimal(draft.packagingCost);
+  const additionalOperationalCost = laborCost + packagingCost;
+  const materialCostPerUnit = materialWeightGrams > 0 && filamentCostPerKg > 0 ? (materialWeightGrams / 1000) * filamentCostPerKg : 0;
+  const energyCostPerUnit = selectedPrinter && printHours > 0
+    ? (selectedPrinter.consumo_watts / 1000) * printHours * settings.custo_kwh
+    : 0;
+  const amortizationCostPerUnit = selectedPrinter && printHours > 0
+    ? (selectedPrinter.custo_aquisicao / selectedPrinter.vida_util_horas) * printHours
+    : 0;
+
+  const unitTechnicalCost = useMemo(() => {
+    if (!selectedPrinter || materialWeightGrams <= 0 || filamentCostPerKg <= 0 || printHours <= 0) {
+      return 0;
+    }
+
+    const materialCost = (materialWeightGrams / 1000) * filamentCostPerKg;
+    const energyCost = (selectedPrinter.consumo_watts / 1000) * printHours * settings.custo_kwh;
+    const amortizationCost = (selectedPrinter.custo_aquisicao / selectedPrinter.vida_util_horas) * printHours;
+    return materialCost + energyCost + amortizationCost;
+  }, [filamentCostPerKg, materialWeightGrams, printHours, selectedPrinter, settings.custo_kwh]);
+
+  const totalItemCost = unitTechnicalCost * quantity;
+  const totalPrintHours = printHours * quantity;
+  const totalQuantity = quantity;
+  const productionCost = totalItemCost + additionalOperationalCost;
+  const suggestedPrice = roundCurrency(productionCost * (1 + appliedMargin / 100));
+  const netProfit = roundCurrency(suggestedPrice - productionCost);
+  const unitProductCost = totalQuantity ? roundCurrency(productionCost / totalQuantity) : 0;
+  const averageUnitPrice = totalQuantity ? suggestedPrice / totalQuantity : 0;
+  const recentQuotes = quotes.slice(0, 4);
+  const isSubmitDisabled = isLoading;
+  const canShareQuote = isAuthenticated && suggestedPrice > 0 && productionCost > 0 && !!selectedPrinter;
+  const draftSignature = useMemo(() => getDraftSignature(draft), [draft]);
+  const isViewingSharedQuote = false;
+  const isViewingSavedQuote = Boolean(quoteId) && !shareToken;
+  const sharedQuoteSummary = persistedQuote ? getQuotePrimarySummary(persistedQuote) : null;
+  const normalizedClientSearch = clientSearch.trim().toLowerCase();
+  const filteredClients = clients.filter((client) => client.name.toLowerCase().includes(normalizedClientSearch));
+  const hasExactClientMatch = clients.some((client) => client.name.trim().toLowerCase() === normalizedClientSearch);
+  const unitCostBreakdownModal = isUnitCostBreakdownOpen && typeof document !== 'undefined'
+    ? createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#020617]/74 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-[760px] rounded-[32px] border border-white/10 bg-[#081120] p-5 shadow-[0_32px_100px_rgba(0,0,0,0.45)]">
+            <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-4">
+              <div>
+                <h3 className="text-xl font-semibold text-white">Memoria de calculo do custo do produto</h3>
+                <p className="mt-1 text-sm text-slate-400">Detalhamento em tempo real do valor unitario exibido no painel, incluindo material, energia eletrica, amortizacao e custos operacionais.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsUnitCostBreakdownOpen(false)}
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-slate-300 transition hover:bg-white/[0.08] hover:text-white"
+                aria-label="Fechar memoria de calculo"
+              >
+                x
+              </button>
+            </div>
+
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              <div className="rounded-[28px] border border-white/10 bg-white/[0.04] p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Entradas da simulacao</p>
+                <div className="mt-4 space-y-3 text-sm text-slate-300">
+                  <div className="flex items-center justify-between gap-4"><span>Peso informado</span><strong className="text-white">{materialWeightGrams > 0 ? `${materialWeightGrams.toFixed(2)} g` : '--'}</strong></div>
+                  <div className="flex items-center justify-between gap-4"><span>Preco do filamento</span><strong className="text-white">{filamentCostPerKg > 0 ? `${formatCurrency(filamentCostPerKg)}/kg` : '--'}</strong></div>
+                  <div className="flex items-center justify-between gap-4"><span>Tempo de impressao</span><strong className="text-white">{draft.printHours || '--'}</strong></div>
+                  <div className="flex items-center justify-between gap-4"><span>Quantidade</span><strong className="text-white">{totalQuantity}</strong></div>
+                  <div className="flex items-center justify-between gap-4"><span>Impressora</span><strong className="text-right text-white">{selectedPrinter?.nome || '--'}</strong></div>
+                  <div className="flex items-center justify-between gap-4"><span>Consumo eletrico</span><strong className="text-white">{selectedPrinter ? `${selectedPrinter.consumo_watts} W` : '--'}</strong></div>
+                  <div className="flex items-center justify-between gap-4"><span>Custo da energia</span><strong className="text-white">{formatCurrency(settings.custo_kwh)}/kWh</strong></div>
+                  <div className="flex items-center justify-between gap-4"><span>Custo de aquisicao</span><strong className="text-white">{selectedPrinter ? formatCurrency(selectedPrinter.custo_aquisicao) : '--'}</strong></div>
+                  <div className="flex items-center justify-between gap-4"><span>Vida util da impressora</span><strong className="text-white">{selectedPrinter ? `${selectedPrinter.vida_util_horas} h` : '--'}</strong></div>
+                </div>
+              </div>
+
+              <div className="rounded-[28px] border border-white/10 bg-white/[0.04] p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Memoria tecnica por unidade</p>
+                <div className="mt-4 space-y-4 text-sm text-slate-300">
+                  <div>
+                    <p className="text-slate-400">Material</p>
+                    <p className="mt-1 text-white">({(materialWeightGrams / 1000).toFixed(4)} kg) x {formatCurrency(filamentCostPerKg)}/kg = {formatCurrency(roundCurrency(materialCostPerUnit))}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-400">Energia eletrica</p>
+                    <p className="mt-1 text-white">({selectedPrinter ? (selectedPrinter.consumo_watts / 1000).toFixed(4) : '0.0000'} kW) x {printHours.toFixed(4)} h x {formatCurrency(settings.custo_kwh)}/kWh = {formatCurrency(roundCurrency(energyCostPerUnit))}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-400">Amortizacao da impressora</p>
+                    <p className="mt-1 text-white">({selectedPrinter ? `${formatCurrency(selectedPrinter.custo_aquisicao)} / ${selectedPrinter.vida_util_horas} h` : '--'}) x {printHours.toFixed(4)} h = {formatCurrency(roundCurrency(amortizationCostPerUnit))}</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-[#0a1228]/78 p-3">
+                    <div className="flex items-center justify-between gap-4"><span>Custo tecnico por unidade</span><strong className="text-cyan-200">{formatCurrency(roundCurrency(unitTechnicalCost))}</strong></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <div className="rounded-[28px] border border-white/10 bg-white/[0.04] p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Custos adicionais da cotacao</p>
+                <div className="mt-4 space-y-3 text-sm text-slate-300">
+                  <div className="flex items-center justify-between gap-4"><span>Mao de obra</span><strong className="text-white">{formatCurrency(laborCost)}</strong></div>
+                  <div className="flex items-center justify-between gap-4"><span>Embalagem</span><strong className="text-white">{formatCurrency(packagingCost)}</strong></div>
+                  <div className="flex items-center justify-between gap-4"><span>Custos operacionais adicionais</span><strong className="text-white">{formatCurrency(roundCurrency(additionalOperationalCost))}</strong></div>
+                </div>
+              </div>
+
+              <div className="rounded-[28px] border border-cyan-400/20 bg-cyan-400/[0.06] p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Fechamento do custo exibido</p>
+                <div className="mt-4 space-y-3 text-sm text-slate-200">
+                  <div className="flex items-center justify-between gap-4"><span>Custo tecnico total</span><strong>{formatCurrency(roundCurrency(totalItemCost))}</strong></div>
+                  <div className="flex items-center justify-between gap-4"><span>Custo total da cotacao</span><strong>{formatCurrency(roundCurrency(productionCost))}</strong></div>
+                  <div className="flex items-center justify-between gap-4"><span>Divisao por quantidade</span><strong>{totalQuantity} un</strong></div>
+                  <div className="border-t border-white/10 pt-3">
+                    <div className="flex items-center justify-between gap-4 text-base font-semibold text-white"><span>Custo do produto (unidade)</span><strong className="text-cyan-200">{formatCurrency(unitProductCost)}</strong></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )
+    : null;
+  const clientPickerModal = isClientPickerOpen && typeof document !== 'undefined'
+    ? createPortal(
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-[#020617]/70 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-[560px] rounded-[32px] border border-white/10 bg-[#081120] p-5 shadow-[0_32px_100px_rgba(0,0,0,0.45)]">
+            <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-4">
+              <div>
+                <h3 className="text-xl font-semibold text-white">Cliente</h3>
+                <p className="mt-1 text-sm text-slate-400">Busque um nome existente ou cadastre um novo cliente para esta cotacao.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsClientPickerOpen(false)}
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-slate-300 transition hover:bg-white/[0.08] hover:text-white"
+                aria-label="Fechar selecao de cliente"
+              >
+                x
+              </button>
+            </div>
+
+            <div className="mt-5">
+              <label className="flex min-h-[60px] items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 focus-within:border-cyan-400/40 focus-within:bg-cyan-400/[0.05]">
+                <input
+                  autoFocus
+                  type="text"
+                  value={clientSearch}
+                  onChange={(event) => setClientSearch(event.target.value)}
+                  placeholder="Digite o nome do cliente"
+                  className="w-full border-0 bg-transparent p-0 text-base font-semibold text-white outline-none placeholder:text-slate-500"
+                />
+              </label>
+            </div>
+
+            <div className="mt-5 max-h-[280px] space-y-2 overflow-y-auto pr-1">
+              {filteredClients.length ? (
+                filteredClients.map((client) => (
+                  <button
+                    key={client.id}
+                    type="button"
+                    onClick={() => handleSelectClient(client.name)}
+                    className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-left transition hover:border-cyan-400/35 hover:bg-cyan-400/[0.08]"
+                  >
+                    <span className="text-sm font-semibold text-white">{client.name}</span>
+                    <span className="text-xs uppercase tracking-[0.18em] text-slate-500">Selecionar</span>
+                  </button>
+                ))
+              ) : (
+                <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.03] px-4 py-5 text-sm text-slate-400">
+                  Nenhum cliente encontrado com esse nome.
+                </div>
+              )}
+            </div>
+
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  updateDraft({ clientName: '' });
+                  setClientSearch('');
+                  setIsClientPickerOpen(false);
+                }}
+                className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-semibold text-slate-300 transition hover:bg-white/[0.08] hover:text-white"
+              >
+                Sem cliente
+              </button>
+
+              <button
+                type="button"
+                onClick={handleCreateClient}
+                disabled={!clientSearch.trim() || hasExactClientMatch || isSavingClient}
+                className="rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+              >
+                {hasExactClientMatch ? 'Cliente ja cadastrado' : isSavingClient ? 'Salvando...' : 'Cadastrar cliente'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )
+    : null;
+
+  async function handleCreateClient() {
+    const nextClientName = clientSearch.trim();
+
+    if (!nextClientName) {
+      return;
+    }
+
+    try {
+      setIsSavingClient(true);
+      const response = await api.post<Client>('/clients', { name: nextClientName });
+      setClients((currentClients) => {
+        const alreadyExists = currentClients.some((client) => client.id === response.data.id);
+        const nextClients = alreadyExists ? currentClients : [...currentClients, response.data];
+        return nextClients.sort((left, right) => left.name.localeCompare(right.name));
+      });
+      updateDraft({ clientName: response.data.name });
+      setClientSearch('');
+      setIsClientPickerOpen(false);
+    } catch (requestError: any) {
+      setError(requestError?.response?.data?.error || 'Nao foi possivel cadastrar o cliente.');
+    } finally {
+      setIsSavingClient(false);
+    }
+  }
+
+  function handleSelectClient(name: string) {
+    updateDraft({ clientName: name });
+    setClientSearch('');
+    setIsClientPickerOpen(false);
+  }
+
+  function clearFieldErrors(partial: Partial<QuoteDraft>) {
+    const keys = Object.keys(partial) as QuoteFieldName[];
+
+    if (!keys.length) {
+      return;
+    }
+
+    setFieldErrors((currentErrors) => {
+      const nextErrors = { ...currentErrors };
+      let hasChanges = false;
+
+      keys.forEach((key) => {
+        if (key in nextErrors) {
+          delete nextErrors[key];
+          hasChanges = true;
+        }
+      });
+
+      return hasChanges ? nextErrors : currentErrors;
+    });
+  }
+
+  function updateDraft(partial: Partial<QuoteDraft>) {
+    clearFieldErrors(partial);
+    setDraft((currentDraft) => ({ ...currentDraft, ...partial }));
+  }
+
+  function validateDraft(): { fieldErrors: QuoteFieldErrors; formError: string | null } {
+    const nextFieldErrors: QuoteFieldErrors = {};
+
+    if (!draft.productName.trim()) {
+      nextFieldErrors.productName = 'Informe o nome do produto para identificar esta cotacao.';
+    }
+
+    if (!draft.materialWeightGrams.trim() || materialWeightGrams <= 0) {
+      nextFieldErrors.materialWeightGrams = 'Informe um peso maior que zero em gramas.';
+    }
+
+    if (!draft.filamentCostPerKg.trim() || filamentCostPerKg <= 0) {
+      nextFieldErrors.filamentCostPerKg = 'Informe um preco por kg maior que zero para o filamento.';
+    }
+
+    if (!draft.printHours.trim()) {
+      nextFieldErrors.printHours = 'Informe o tempo de impressao no formato hh:mm:ss.';
+    } else if (printHours <= 0) {
+      nextFieldErrors.printHours = 'Use o formato hh:mm:ss com um tempo maior que zero. Exemplo: 01:30:00.';
+    }
+
+    if (!draft.quantity.trim() || quantity <= 0) {
+      nextFieldErrors.quantity = 'Informe uma quantidade inteira maior que zero.';
+    }
+
+    if (!draft.printerId) {
+      nextFieldErrors.printerId = 'Selecione a impressora usada para produzir esta cotacao.';
+    }
+
+    if (!draft.date) {
+      return {
+        fieldErrors: nextFieldErrors,
+        formError: 'Nao foi possivel definir a data da cotacao. Atualize a pagina e tente novamente.',
+      };
+    }
+
+    if (!printers.length) {
+      return {
+        fieldErrors: nextFieldErrors,
+        formError: 'Cadastre pelo menos uma impressora antes de salvar a cotacao.',
+      };
+    }
+
+    if (Object.keys(nextFieldErrors).length > 0) {
+      return {
+        fieldErrors: nextFieldErrors,
+        formError: 'Revise os campos obrigatorios destacados antes de salvar a cotacao.',
+      };
+    }
+
+    if (suggestedPrice <= 0) {
+      return {
+        fieldErrors: nextFieldErrors,
+        formError: 'Nao foi possivel calcular um valor de venda valido. Revise os dados informados.',
+      };
+    }
+
+    return {
+      fieldErrors: {},
+      formError: null,
+    };
+  }
+
+  function focusFirstInvalidField(errors: QuoteFieldErrors) {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const fieldOrder: Array<{ key: QuoteFieldName; elementId: string }> = [
+      { key: 'productName', elementId: 'quote-product-name' },
+      { key: 'materialWeightGrams', elementId: 'quote-weight' },
+      { key: 'filamentCostPerKg', elementId: 'quote-filament-cost' },
+      { key: 'printHours', elementId: 'quote-print-hours' },
+      { key: 'quantity', elementId: 'quote-quantity' },
+      { key: 'printerId', elementId: 'quote-printer' },
+    ];
+
+    const firstInvalid = fieldOrder.find(({ key }) => errors[key]);
+
+    if (!firstInvalid) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      document.getElementById(firstInvalid.elementId)?.focus();
+    });
+  }
+
+  function applyQuantityPreset(nextQuantity: number) {
+    updateDraft({ quantity: String(nextQuantity) });
+  }
+
+  function resetComposer() {
+    setDraft(getDefaultDraft());
+    setClientSearch('');
+    setPersistedQuote(null);
+    setPersistedSignature(null);
+    setPublicShareUrl(null);
+    navigate('/quotes', { replace: true });
+  }
+
+  function upsertQuoteInHistory(quote: Quote) {
+    setQuotes((currentQuotes) => {
+      const nextQuotes = [quote, ...currentQuotes.filter((currentQuote) => currentQuote.id !== quote.id)];
+      return nextQuotes;
+    });
+  }
+
+  async function createQuoteFromDraft() {
+    const validationResult = validateDraft();
+
+    if (validationResult.formError) {
+      setFieldErrors(validationResult.fieldErrors);
+      setError(validationResult.formError);
+      focusFirstInvalidField(validationResult.fieldErrors);
+      return null;
+    }
+
+    setFieldErrors({});
+
+    const marginMultiplier = 1 + appliedMargin / 100;
+    const targetTotal = roundCurrency((totalItemCost + additionalOperationalCost) * marginMultiplier);
+    const unitPrice = Number((targetTotal / quantity).toFixed(4));
+    const payloadItems = [
+      {
+        productName: draft.productName.trim(),
+        printerId: draft.printerId,
+        materialWeightGrams,
+        filamentCostPerKg,
+        printHours,
+        quantidade: quantity,
+        preco_unitario: unitPrice,
+      },
+    ];
+
+    const manualMetadata = {
+      productName: draft.productName.trim(),
+      printerId: draft.printerId,
+      materialWeightGrams,
+      filamentCostPerKg,
+      printHours,
+      quantity,
+    };
+
+    const contextNotes = [
+      draft.notes.trim() || null,
+      `Contexto comercial: canal ${selectedChannel.label}; mao de obra ${formatCurrency(laborCost)}; embalagem ${formatCurrency(packagingCost)}.`,
+      `__RL3D_MANUAL__${JSON.stringify(manualMetadata)}`,
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+
+    const response = await api.post<Quote>('/quotes', {
+      nome_cliente: draft.clientName,
+      data: draft.date || getCurrentQuoteDate(),
+      notes: contextNotes,
+      sale_channel: draft.saleChannel,
+      subtotal_custo: roundCurrency(productionCost),
+      margem_percentual: Number(appliedMargin.toFixed(2)),
+      items: payloadItems,
+    });
+
+    upsertQuoteInHistory(response.data);
+    setPersistedQuote(response.data);
+    setPersistedSignature(draftSignature);
+    setPublicShareUrl(null);
+    return response.data;
+  }
+
+  async function ensurePersistedQuote() {
+    if (persistedQuote && persistedSignature === draftSignature) {
+      return persistedQuote;
+    }
+
+    return createQuoteFromDraft();
+  }
+
+  async function generatePublicShareUrl() {
+    const quote = await ensurePersistedQuote();
+
+    if (!quote) {
+      return null;
+    }
+
+    const response = await api.post<ShareQuoteResponse>(`/quotes/${quote.id}/share`);
+    setPublicShareUrl(response.data.shareUrl);
+    return response.data.shareUrl;
+  }
+
+  async function handleCopyShareLink() {
+    if (!isAuthenticated) {
+      redirectToLogin();
+      return;
+    }
+
+    if (!canShareQuote) {
+      setError('Preencha a cotacao com uma impressora valida antes de copiar o link publico.');
+      return;
+    }
+
+    try {
+      setError(null);
+      setSuccess(null);
+      setIsSharingLink(true);
+
+      const shareUrl = await generatePublicShareUrl();
+
+      if (!shareUrl) {
+        return;
+      }
+
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+        setSuccess('Link publico copiado para a area de transferencia.');
+        return;
+      }
+
+      setSuccess('Link publico gerado. Copie a URL exibida pelo navegador.');
+    } catch (requestError: any) {
+      setError(requestError?.response?.data?.error || 'Nao foi possivel copiar o link publico desta cotacao.');
+    } finally {
+      setIsSharingLink(false);
+    }
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     setSuccess(null);
 
-    // Validação
-    if (!saleType) {
-      setError('Selecione Venda Direta, E-commerce ou Usuario Final antes de gerar o orçamento.');
+    if (!isAuthenticated) {
+      redirectToLogin();
       return;
     }
 
-    if (items.some((item) => !item.productId || !item.printerId || item.quantidade === '' || Number(item.quantidade) <= 0)) {
-      setError('Todos os itens devem ter um produto e uma impressora selecionados');
-      return;
-    }
-
-    setIsLoading(true);
     try {
-      const payload = {
-        nome_cliente: clientName,
-        data: date,
-        tipo_venda: saleType,
-        items: items.map((item) => ({
-          ...item,
-          quantidade: Number(item.quantidade),
-        })),
-      };
-      const response = editingQuoteId
-        ? await api.put<Quote>(`/quotes/${editingQuoteId}`, payload)
-        : await api.post<Quote>('/quotes', payload);
+      setIsLoading(true);
+      const quote = await createQuoteFromDraft();
 
-      setQuotes((prev) => {
-        if (editingQuoteId) {
-          return prev.map((quote) => (quote.id === editingQuoteId ? response.data : quote));
-        }
+      if (!quote) {
+        return;
+      }
 
-        return [response.data, ...prev];
-      });
-      setExpandedQuoteId(response.data.id);
-      setHighlightedQuoteId(response.data.id);
-      setSuccess(editingQuoteId ? 'Orçamento atualizado com sucesso!' : 'Orçamento criado com sucesso!');
-      resetForm();
-      setTimeout(() => setSuccess(null), 3000);
-    } catch (err: any) {
-      setError(err?.response?.data?.error || 'Erro ao salvar orçamento');
+      setSuccess('Cotacao salva como um novo registro comercial.');
+      resetComposer();
+    } catch (requestError: any) {
+      setError(requestError?.response?.data?.error || 'Nao foi possivel salvar a cotacao.');
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleEdit = (quote: Quote) => {
-    setEditingQuoteId(quote.id);
-    setError(null);
-    setSuccess(null);
-    setClientName(quote.nome_cliente);
-    setDate(new Date(quote.data).toISOString().substring(0, 10));
-    setSaleType(quote.tipo_venda);
-    setItems(
-      quote.items.map((item) => ({
-        productId: item.productId,
-        printerId: item.printerId || '',
-        quantidade: item.quantidade,
-        preco_unitario: formatDecimalInput(item.preco_unitario),
-      })),
-    );
-  };
-
-  const handleCancelEdit = () => {
-    setError(null);
-    setSuccess(null);
-    resetForm();
-  };
-
-  const handleDownloadPdf = async (quote: Quote) => {
-    setError(null);
-
-    if (!quote.tipo_venda) {
-      setError('Selecione uma modalidade de venda e salve o orçamento antes de exportar o PDF.');
-      return;
-    }
-
-    try {
-      const response = await api.get(`/quotes/${quote.id}/pdf`, {
-        responseType: 'blob',
-      });
-
-      const pdfUrl = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
-      const link = window.document.createElement('a');
-      link.href = pdfUrl;
-      link.download = `quote-${quote.id}.pdf`;
-      window.document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(pdfUrl);
-    } catch (requestError: any) {
-      if (requestError?.response?.data instanceof Blob) {
-        try {
-          const errorPayload = JSON.parse(await requestError.response.data.text());
-          setError(errorPayload?.error || 'Erro ao exportar orçamento em PDF.');
-          return;
-        } catch {
-          setError('Erro ao exportar orçamento em PDF.');
-          return;
-        }
-      }
-
-      setError(requestError?.response?.data?.error || 'Erro ao exportar orçamento em PDF.');
-    }
-  };
+  }
 
   return (
-    <div>
-      <Loading isLoading={isLoading} label="Processando orçamento..." />
-      
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-semibold text-slate-900">Orçamentos</h1>
-          <p className="mt-2 text-slate-600">Monte orçamentos profissionais e exporte em PDF.</p>
-        </div>
-      </div>
+    <div className="space-y-8">
+      <Loading isLoading={isLoading} label="Atualizando o cockpit comercial..." />
 
-      {error && <Alert type="error" message={error} onClose={() => setError(null)} />}
-      {success && <Alert type="success" message={success} onClose={() => setSuccess(null)} />}
+      {error ? <Alert type="error" message={error} onClose={() => setError(null)} /> : null}
+      {success ? <Alert type="success" message={success} onClose={() => setSuccess(null)} /> : null}
 
-      {editingQuoteId ? (
-        <div className="mb-6 rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-900">
-          Editando orçamento existente. Ajuste cliente, data e itens antes de salvar.
-        </div>
-      ) : null}
-
-      <form onSubmit={handleSubmit} className="space-y-6 rounded-3xl border border-slate-200 bg-slate-50 p-6 shadow-sm">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <label className="space-y-2 text-sm text-slate-700">
-            Nome do cliente
-            <input value={clientName} onChange={(e) => setClientName(e.target.value)} className="form-control" required />
-          </label>
-          <label className="space-y-2 text-sm text-slate-700">
-            Data
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="form-control" required />
-          </label>
-        </div>
-
-        <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-sm font-semibold text-slate-900">Modalidade de venda</p>
-              <p className="text-sm text-slate-500">Selecione a opção antes de gerar o orçamento ou exportar em PDF.</p>
+      <form onSubmit={handleSubmit} className="space-y-8">
+        <div className="grid gap-6 min-[900px]:grid-cols-3">
+          <section className={mainPanelClassName}>
+            <div className="border-b border-white/10 pb-5">
+              <h2 className={sectionTitleClassName}>{isAuthenticated ? 'Produto' : 'Simulação'}</h2>
+              <p className={sectionDescriptionClassName}>
+                {isAuthenticated
+                  ? 'Informe produto, cliente, peso, tempo e quantidade, depois selecione a impressora usada na producao.'
+                  : 'Informe peso, tempo e quantidade, depois selecione a impressora usada para calcular a cotacao.'}
+              </p>
+              <p className="mt-3 text-sm font-medium text-slate-300">
+                <span className="text-red-300">*</span> Campos obrigatorios
+              </p>
             </div>
-            <div className="grid gap-3 sm:grid-cols-3">
-              {SALE_TYPE_OPTIONS.map((option) => (
-                <label
-                  key={option.value}
-                  className={`flex cursor-pointer items-center gap-3 rounded-2xl border px-4 py-3 text-sm transition ${saleType === option.value ? 'border-cyan-400 bg-cyan-50 text-cyan-900' : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'}`}
-                >
-                  <input
-                    type="radio"
-                    name="saleType"
-                    value={option.value}
-                    checked={saleType === option.value}
-                    onChange={(event) => {
-                      const nextSaleType = event.target.value as QuoteSaleType;
-                      setSaleType(nextSaleType);
-                      setItems((prev) => prev.map((item) => {
-                        const product = products.find((entry) => entry.id === item.productId);
-                        const printer = printers.find((entry) => entry.id === item.printerId);
 
-                        return {
-                          ...item,
-                          preco_unitario: buildDisplayUnitPrice(product, printer),
-                        };
-                      }));
-                    }}
-                    className="h-4 w-4"
-                  />
-                  <span>{option.label}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-          <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-slate-600">
-            <span>Margem selecionada: <strong className="text-slate-900">{selectedMarginPercent !== null ? `${selectedMarginPercent.toFixed(2)}%` : 'Nao selecionada'}</strong></span>
-            <span>Custo total de producao: <strong className="text-slate-900">{formatCurrency(formTotalCost)}</strong></span>
-            <span>Total atual do orçamento: <strong className="text-slate-900">{formatCurrency(formTotalSale)}</strong></span>
-          </div>
-        </div>
+            <div className="mt-6 space-y-5">
+              {isAuthenticated ? (
+                <div className="grid gap-4">
+                  <label className="block rounded-[28px] border border-white/10 bg-[#0a1228]/85 p-4 shadow-[0_16px_50px_rgba(0,0,0,0.18)]">
+                    <span className="block text-sm font-medium text-slate-200">Nome do produto <span className="text-red-300">*</span></span>
+                    <input
+                      id="quote-product-name"
+                      value={draft.productName}
+                      onChange={(event) => updateDraft({ productName: event.target.value })}
+                      placeholder="Ex: Suporte de celular"
+                      aria-invalid={fieldErrors.productName ? 'true' : 'false'}
+                      aria-describedby={fieldErrors.productName ? 'quote-product-name-error' : undefined}
+                      className={`mt-4 min-h-[60px] w-full rounded-2xl border bg-white/[0.04] px-4 text-base font-semibold text-white outline-none transition focus:bg-cyan-400/[0.05] ${fieldErrors.productName ? 'border-red-400/60 focus:border-red-400/70' : 'border-white/10 focus:border-cyan-400/40'}`}
+                    />
+                    {fieldErrors.productName ? <span id="quote-product-name-error" className="mt-3 block text-sm leading-5 text-red-300">{fieldErrors.productName}</span> : null}
+                  </label>
 
-        <div className="rounded-3xl bg-white p-4 shadow-sm">
-          <div className="grid grid-cols-12 gap-4 border-b border-slate-200 pb-3 text-sm font-semibold text-slate-500">
-            <span className="col-span-4">Produto</span>
-            <span className="col-span-3">Impressora</span>
-            <span className="col-span-2 text-right">Qtd</span>
-            <span className="col-span-2 text-right">Preço unitário</span>
-            <span className="col-span-1 text-right">Subtotal</span>
-          </div>
-          <div className="space-y-3 py-4">
-            {items.map((item, index) => {
-              const product = products.find((product) => product.id === item.productId);
-              const printer = printers.find((printer) => printer.id === item.printerId);
-              const subtotal = Number(item.quantidade || 0) * (parseDecimalInput(item.preco_unitario) || 0);
-              return (
-                <div key={index} className="grid grid-cols-12 gap-4 rounded-2xl border border-slate-200 bg-slate-50/80 p-3 text-sm text-slate-700">
-                  <select
-                    className="form-control col-span-4"
-                    value={item.productId}
-                    onChange={(e) => {
-                      const product = products.find((product) => product.id === e.target.value);
-                      const nextPrinterId = item.printerId || '';
-                      const nextPrinter = printers.find((printer) => printer.id === nextPrinterId);
-                      updateItem(index, {
-                        productId: e.target.value,
-                        printerId: nextPrinterId,
-                        preco_unitario: product && nextPrinter
-                          ? buildDisplayUnitPrice(product, nextPrinter)
-                          : formatDecimalInput(product?.custo_total || parseDecimalInput(item.preco_unitario) || 0),
-                      });
-                    }}
-                    required
-                  >
-                    <option value="">Escolher produto</option>
-                    {products.map((product) => (
-                      <option key={product.id} value={product.id}>
-                        {product.sku} • {formatCurrency(product.custo_total)}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    className="form-control col-span-3"
-                    value={item.printerId}
-                    onChange={(e) => {
-                      const nextPrinter = printers.find((printer) => printer.id === e.target.value);
-                      updateItem(index, {
-                        printerId: e.target.value,
-                        preco_unitario: product && nextPrinter
-                          ? buildDisplayUnitPrice(product, nextPrinter)
-                          : formatDecimalInput(parseDecimalInput(item.preco_unitario) || 0),
-                      });
-                    }}
-                    required
-                  >
-                    <option value="">Escolher impressora</option>
-                    {printers.map((printer) => (
-                      <option key={printer.id} value={printer.id}>
-                        {printer.nome}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    className="form-control col-span-2 text-right"
-                    type="number"
-                    min="1"
-                    value={item.quantidade}
-                    onChange={(e) => updateItem(index, { quantidade: parseNumberInputValue(e.target.value) })}
-                    required
-                  />
-                  <input
-                    className="form-control col-span-2 text-right read-only:bg-slate-100 read-only:text-slate-500"
-                    type="text"
-                    inputMode="decimal"
-                    value={item.preco_unitario}
-                    onChange={(e) => updateItem(index, { preco_unitario: e.target.value })}
-                    onBlur={() => {
-                      const parsedValue = parseDecimalInput(item.preco_unitario);
-
-                      if (Number.isFinite(parsedValue)) {
-                        updateItem(index, { preco_unitario: formatDecimalInput(parsedValue) });
-                      }
-                    }}
-                    readOnly={Boolean(item.printerId)}
-                    required
-                  />
-                  <div className="col-span-1 text-right text-slate-900">{formatCurrency(subtotal)}</div>
-                  <div className="col-span-12 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
-                    <span>
-                      {printer ? `Cálculo interno com a impressora ${printer.nome}.` : 'Selecione a impressora para recalcular o valor do item.'}
-                    </span>
-                    <div className="flex items-center gap-3">
-                      {product ? <span>Falhas aplicadas: {product.falha_percentual.toFixed(1)}%</span> : null}
-                      {items.length > 1 ? (
-                        <button
-                          type="button"
-                          onClick={() => removeItem(index)}
-                          className="rounded-xl border border-rose-200 px-3 py-1 font-medium text-rose-700 transition hover:bg-rose-50"
-                        >
-                          Remover item
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
+                  <label className="block rounded-[28px] border border-white/10 bg-[#0a1228]/85 p-4 shadow-[0_16px_50px_rgba(0,0,0,0.18)]">
+                    <span className="block text-sm font-medium text-slate-200">Cliente</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setClientSearch(draft.clientName);
+                        setIsClientPickerOpen(true);
+                      }}
+                      className="mt-4 flex min-h-[60px] w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-4 text-left text-base font-semibold text-white outline-none transition hover:border-cyan-400/35 hover:bg-cyan-400/[0.05]"
+                    >
+                      <span className={draft.clientName ? 'text-white' : 'text-slate-500'}>{draft.clientName || 'Selecionar ou cadastrar cliente'}</span>
+                      <span className="text-cyan-200" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-4.35-4.35M10.75 18a7.25 7.25 0 1 1 0-14.5 7.25 7.25 0 0 1 0 14.5Z" />
+                        </svg>
+                      </span>
+                    </button>
+                  </label>
                 </div>
-              );
-            })}
-          </div>
-          <button type="button" onClick={addItem} className="rounded-2xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200">
-            + Adicionar item
-          </button>
-        </div>
+              ) : null}
 
-        <div className="flex flex-wrap gap-3">
-          <button type="submit" className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700">
-            {editingQuoteId ? 'Salvar alterações' : 'Gerar orçamento'}
-          </button>
-          {editingQuoteId ? (
-            <button type="button" onClick={handleCancelEdit} className="rounded-2xl border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
-              Cancelar edição
-            </button>
-          ) : null}
-        </div>
-      </form>
+              {!isAuthenticated ? (
+                <Alert type="info" message="Voce pode calcular livremente como visitante. Para salvar cotacoes, registrar clientes e acessar historico, entre com sua conta." />
+              ) : null}
 
-      <div className="mt-8 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
-          <label className="flex-1 space-y-2 text-sm text-slate-700">
-            Filtrar por cliente
-            <input
-              value={clientFilter}
-              onChange={(event) => setClientFilter(event.target.value)}
-              className="form-control"
-              placeholder="Digite o nome do cliente"
-            />
-          </label>
-          <label className="space-y-2 text-sm text-slate-700">
-            Data inicial
-            <input
-              type="date"
-              value={startDateFilter}
-              onChange={(event) => setStartDateFilter(event.target.value)}
-              className="form-control"
-            />
-          </label>
-          <label className="space-y-2 text-sm text-slate-700">
-            Data final
-            <input
-              type="date"
-              value={endDateFilter}
-              onChange={(event) => setEndDateFilter(event.target.value)}
-              className="form-control"
-            />
-          </label>
-          <button
-            type="button"
-            onClick={() => {
-              setClientFilter('');
-              setStartDateFilter('');
-              setEndDateFilter('');
-            }}
-            className="rounded-2xl border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-          >
-            Limpar filtros
-          </button>
-        </div>
-      </div>
-
-      <div className="mt-8 space-y-3">
-        {paginatedQuotes.map((quote) => (
-          <div
-            key={quote.id}
-            className={`overflow-hidden rounded-3xl border shadow-sm transition ${highlightedQuoteId === quote.id ? 'border-cyan-300 bg-cyan-50/40 shadow-cyan-100' : 'border-slate-200 bg-white'}`}
-          >
-            <button
-              type="button"
-              onClick={() => setExpandedQuoteId((currentId) => (currentId === quote.id ? null : quote.id))}
-              className={`flex w-full items-center justify-between gap-4 px-6 py-5 text-left transition ${highlightedQuoteId === quote.id ? 'hover:bg-cyan-50/70' : 'hover:bg-slate-50'}`}
-            >
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                  <p className="text-lg font-semibold text-slate-900">{quote.nome_cliente}</p>
-                  <p className="text-sm text-slate-500">{new Date(quote.data).toLocaleDateString()}</p>
-                  <p className="text-sm text-slate-500">{quote.summary.items.length} item(ns)</p>
-                  {highlightedQuoteId === quote.id ? (
-                    <span className="inline-flex items-center rounded-full border border-cyan-200 bg-cyan-100 px-3 py-1 text-xs font-semibold text-cyan-800">
-                      Ultimo orçamento
-                    </span>
-                  ) : null}
-                  <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${saleTypeBadgeClass(quote.summary.selectedSaleType)}`}>
-                    {quote.summary.selectedSaleTypeLabel}
-                  </span>
-                </div>
-                <p className="mt-1 text-sm text-slate-500">
-                  Total do orçamento: <span className="font-medium text-slate-900">{formatCurrency(quote.valor_total)}</span>
-                </p>
+              <div className="grid gap-4 xl:grid-cols-2">
+                <NumericInput id="quote-weight" label="Peso" value={draft.materialWeightGrams} onChange={(materialWeightGramsValue) => updateDraft({ materialWeightGrams: materialWeightGramsValue })} suffix="g" hint="material" required error={fieldErrors.materialWeightGrams} />
+                <NumericInput id="quote-filament-cost" label="Preco do filamento" value={draft.filamentCostPerKg} onChange={(filamentCostPerKgValue) => updateDraft({ filamentCostPerKg: filamentCostPerKgValue })} prefix="R$" hint="kg" required error={fieldErrors.filamentCostPerKg} />
               </div>
-              <svg
-                viewBox="0 0 24 24"
-                className={`h-5 w-5 shrink-0 text-slate-500 transition-transform ${expandedQuoteId === quote.id ? 'rotate-180' : ''}`}
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="m6 9 6 6 6-6" />
-              </svg>
-            </button>
 
-            {expandedQuoteId === quote.id ? (
-              <div className="border-t border-slate-200 px-6 py-5">
-                <div className="flex flex-wrap gap-2 text-sm text-slate-600">
-                  <button
-                    type="button"
-                    onClick={() => handleEdit(quote)}
-                    className="rounded-full border border-cyan-200 px-4 py-2 font-medium text-cyan-700 hover:bg-cyan-50"
-                  >
-                    Editar orçamento
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDownloadPdf(quote)}
-                    className="rounded-full bg-slate-900 px-4 py-2 text-white hover:bg-slate-700"
-                  >
-                    Baixar PDF
-                  </button>
-                </div>
-
-                <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/50">
-                  <div className="grid grid-cols-[1.4fr_0.6fr_1fr_0.8fr_0.8fr] gap-4 px-5 py-4 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                    <span>Produto</span>
-                    <span>Qtd</span>
-                    <span>Impressora</span>
-                    <span className="text-right">Custo unitário</span>
-                    <span className="text-right">Subtotal</span>
-                  </div>
-                  <div className="divide-y divide-slate-200 bg-white">
-                    {quote.summary.items.map((item) => (
-                      <div key={`${quote.id}-${item.productId}-${item.printerId || 'sem-printer'}`} className="grid grid-cols-[1.4fr_0.6fr_1fr_0.8fr_0.8fr] gap-4 px-5 py-4 text-sm text-slate-700">
-                        <div>
-                          <p className="font-medium text-slate-900">{item.productName}</p>
-                          <p className="text-xs text-slate-500">{item.productSku}</p>
-                        </div>
-                        <span>{item.quantity}</span>
-                        <span>{item.printerName || 'Nao informada'}</span>
-                        <span className="text-right">{formatCurrency(item.unitCost)}</span>
-                        <span className="text-right font-medium text-slate-900">{formatCurrency(item.subtotalCost)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="mt-5 flex flex-wrap items-center gap-3 text-sm text-slate-600">
-                  <span>Custo base: <span className="font-medium text-slate-900">{formatCurrency(quote.summary.totalCost)}</span></span>
-                  <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${saleTypeBadgeClass(quote.summary.selectedSaleType)}`}>
-                    {quote.summary.selectedSaleTypeLabel}
-                  </span>
-                  <span>Total final: <span className="font-medium text-slate-900">{formatCurrency(quote.valor_total)}</span></span>
-                </div>
-
-                <div className="mt-5 grid gap-4 lg:grid-cols-3">
-                  {quote.summary.pricingOptions.map((option) => (
-                    <div key={option.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <p className="text-sm font-semibold text-slate-900">{option.label}</p>
-                      <p className="mt-1 text-xs text-slate-500">Margem: {option.marginPercent.toFixed(2)}%</p>
-                      <p className={`mt-3 text-xl font-semibold ${quote.summary.selectedSaleType === option.id ? 'text-cyan-700' : 'text-slate-900'}`}>{formatCurrency(option.finalPrice)}</p>
+              <div className="grid gap-4 xl:grid-cols-2">
+                <label className={`flex min-h-[132px] flex-col rounded-[28px] border bg-[#0a1228]/85 p-4 shadow-[0_16px_50px_rgba(0,0,0,0.18)] ${fieldErrors.printHours ? 'border-red-400/60' : 'border-white/10'}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <span className="block text-sm font-medium leading-5 text-slate-200">Tempo <span className="text-red-300">*</span></span>
+                      <span className="block text-[11px] uppercase tracking-[0.22em] text-slate-500">HH:MM:SS</span>
                     </div>
-                  ))}
+                    <div className="group relative shrink-0">
+                      <button
+                        type="button"
+                        aria-label="Ajuda sobre o formato de tempo"
+                        className="flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-xs font-semibold text-slate-300 transition hover:border-cyan-400/35 hover:bg-cyan-400/[0.08] hover:text-cyan-200 focus:border-cyan-400/35 focus:bg-cyan-400/[0.08] focus:text-cyan-200 focus:outline-none"
+                      >
+                        ?
+                      </button>
+                      <div className="pricing-help-popover pointer-events-none absolute right-0 top-[calc(100%+10px)] z-20 w-72 rounded-2xl p-4 text-left text-sm leading-6 opacity-0 transition duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                        <p className="pricing-help-title text-[11px] font-semibold uppercase tracking-[0.2em]">Formato esperado</p>
+                        <p className="mt-2">Use `HH:MM:SS` ou `MM:SS`.<br />Exemplos validos: `01:30:00` ou `12:45`.</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className={`mt-4 flex min-h-[60px] items-center gap-3 rounded-2xl border bg-white/[0.04] px-4 py-3 focus-within:bg-cyan-400/[0.05] ${fieldErrors.printHours ? 'border-red-400/60 focus-within:border-red-400/70' : 'border-white/10 focus-within:border-cyan-400/40'}`}>
+                    <input
+                      id="quote-print-hours"
+                      type="text"
+                      inputMode="numeric"
+                      value={draft.printHours}
+                      onChange={(event) => updateDraft({ printHours: event.target.value })}
+                      placeholder="Ex: MM:SS ou HH:MM:SS"
+                      aria-invalid={fieldErrors.printHours ? 'true' : 'false'}
+                      aria-describedby={fieldErrors.printHours ? 'quote-print-hours-error' : undefined}
+                      className="w-full border-0 bg-transparent p-0 text-base font-semibold text-white outline-none placeholder:text-slate-500"
+                    />
+                  </div>
+
+                  {fieldErrors.printHours ? <span id="quote-print-hours-error" className="mt-2 text-sm leading-5 text-red-300">{fieldErrors.printHours}</span> : null}
+                </label>
+
+                <div className={`relative flex min-h-[132px] flex-col rounded-[28px] border bg-[#0a1228]/85 p-4 shadow-[0_16px_50px_rgba(0,0,0,0.18)] ${fieldErrors.quantity ? 'border-red-400/60' : 'border-white/10'}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <span className="block text-sm font-medium leading-5 text-slate-200">Quantidade <span className="text-red-300">*</span></span>
+                      <span className="block text-[11px] uppercase tracking-[0.22em] text-slate-500">unid.</span>
+                    </div>
+                    <button
+                      type="button"
+                      aria-label="Abrir presets de quantidade"
+                      aria-expanded={showQuantityPresets}
+                      onClick={() => setShowQuantityPresets((currentValue) => !currentValue)}
+                      className={`flex h-10 w-10 items-center justify-center rounded-full border text-sm font-semibold transition ${
+                        showQuantityPresets ? 'border-cyan-400/35 bg-cyan-400/[0.08] text-cyan-200' : 'border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]'
+                      }`}
+                    >
+                      +
+                    </button>
+                  </div>
+
+                  <div className={`mt-4 flex min-h-[60px] items-center gap-3 rounded-2xl border bg-white/[0.04] px-4 py-3 focus-within:bg-cyan-400/[0.05] ${fieldErrors.quantity ? 'border-red-400/60 focus-within:border-red-400/70' : 'border-white/10 focus-within:border-cyan-400/40'}`}>
+                    <input
+                      id="quote-quantity"
+                      aria-label="Quantidade"
+                      type="number"
+                      inputMode="decimal"
+                      step="1"
+                      min="1"
+                      value={draft.quantity}
+                      onChange={(event) => updateDraft({ quantity: event.target.value })}
+                      aria-invalid={fieldErrors.quantity ? 'true' : 'false'}
+                      aria-describedby={fieldErrors.quantity ? 'quote-quantity-error' : undefined}
+                      className="w-full border-0 bg-transparent p-0 text-base font-semibold text-white outline-none placeholder:text-slate-500"
+                    />
+                  </div>
+
+                  {fieldErrors.quantity ? <span id="quote-quantity-error" className="mt-3 text-sm leading-5 text-red-300">{fieldErrors.quantity}</span> : null}
+
+                  {showQuantityPresets ? (
+                    <div className="quantity-preset-popover absolute right-4 top-[calc(100%+12px)] z-20 w-[220px] rounded-[24px] p-3">
+                      <p className="quantity-preset-title px-1 text-[11px] font-semibold uppercase tracking-[0.2em]">Preset rapido</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                      {[1, 5, 10, 25].map((presetQuantity) => (
+                        <button
+                          key={presetQuantity}
+                          type="button"
+                          onClick={() => {
+                            applyQuantityPreset(presetQuantity);
+                            setShowQuantityPresets(false);
+                          }}
+                          className={`quantity-preset-option rounded-full border px-3 py-2 text-xs font-semibold transition ${
+                            totalQuantity === presetQuantity ? 'bg-cyan-400 text-slate-950' : ''
+                          }`}
+                        >
+                          {presetQuantity} un
+                        </button>
+                      ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="grid gap-4 xl:grid-cols-2">
+                <NumericInput label="Mao de obra" value={draft.laborCost} onChange={(laborCostValue) => updateDraft({ laborCost: laborCostValue })} prefix="R$" hint="fixo" />
+                <NumericInput label="Embalagem" value={draft.packagingCost} onChange={(packagingCostValue) => updateDraft({ packagingCost: packagingCostValue })} prefix="R$" hint="fixo" />
+              </div>
+
+              {printers.length ? (
+                <PrinterSelector printers={printers} selectedPrinterId={draft.printerId} onChange={(printerId) => updateDraft({ printerId })} required error={fieldErrors.printerId} />
+              ) : (
+                <div className="rounded-[28px] border border-dashed border-white/10 bg-[#0a1228]/60 p-5 text-sm leading-6 text-slate-400">
+                  Nenhuma impressora cadastrada. Cadastre a impressora em Configuracoes para liberar a mesa de cotacao.
+                  <div className="mt-4">
+                    <Link to="/pricing" className="inline-flex rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/[0.08]">
+                      Abrir configuracoes
+                    </Link>
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+
+          <section className={mainPanelClassName}>
+            <div className="border-b border-white/10 pb-5">
+              <h2 className={sectionTitleClassName}>Custos adicionais e margem</h2>
+              <p className={sectionDescriptionClassName}>Escolha o canal comercial e confira a data automatica da cotacao.</p>
+            </div>
+
+            <div className="mt-6 rounded-[30px] border border-white/10 bg-[#0a1228]/78 p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-white">Canal de venda</p>
+                  <p className="mt-1 text-sm text-slate-400">Escolha o contexto comercial e consulte a explicacao so quando precisar.</p>
+                </div>
+                <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.08] px-4 py-3 text-right">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Margem atual</p>
+                  <p className="mt-1 text-lg font-semibold text-cyan-200">{selectedChannel.marginPercent}%</p>
+                </div>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {saleChannels.map((channel) => {
+                  const isSelected = draft.saleChannel === channel.id;
+
+                  return (
+                    <div key={channel.id} className="w-full">
+                      <button
+                        type="button"
+                        onClick={() => updateDraft({ saleChannel: channel.id })}
+                        className={`flex min-h-[60px] w-full items-center justify-between rounded-2xl border px-4 py-3 text-left transition ${
+                          isSelected ? 'border-cyan-400/35 bg-cyan-400/[0.08]' : 'border-white/10 bg-white/[0.04] hover:bg-white/[0.08]'
+                        }`}
+                      >
+                        <span className="text-sm font-semibold text-white">{channel.label}</span>
+                        <span className={`rounded-full px-3 py-1 text-sm font-semibold ${isSelected ? 'bg-cyan-300/20 text-cyan-200' : 'bg-white/[0.06] text-slate-300'}`}>
+                          {channel.marginPercent}%
+                        </span>
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mt-6 rounded-[28px] border border-white/10 bg-[#0a1228]/85 p-4 shadow-[0_16px_50px_rgba(0,0,0,0.18)]">
+              <div className="space-y-1">
+                <span className="block text-sm font-medium leading-5 text-slate-200">Data da cotacao</span>
+                <span className="block text-[11px] uppercase tracking-[0.22em] text-slate-500">preenchimento automatico</span>
+              </div>
+              <div className="mt-4 flex min-h-[60px] items-center rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                <span className="text-base font-semibold text-white">{formatQuoteDate(draft.date)}</span>
+              </div>
+            </div>
+          </section>
+
+          <aside className="flex h-fit self-start flex-col rounded-[34px] border border-cyan-400/15 bg-[linear-gradient(180deg,rgba(7,11,22,0.98),rgba(8,17,32,0.98))] p-5 shadow-[0_32px_100px_rgba(0,0,0,0.32)] backdrop-blur-2xl sm:p-6 min-[900px]:sticky min-[900px]:top-28">
+            <div className="border-b border-white/10 pb-5">
+              <h2 className={sectionTitleClassName}>Painel de preco</h2>
+              <p className={sectionDescriptionClassName}>Boa leitura para decisao rapida, mas agora com menos altura e menos ruido visual.</p>
+            </div>
+
+            {isViewingSavedQuote && persistedQuote ? (
+              <div className="mt-6 rounded-[30px] border border-cyan-400/20 bg-cyan-400/[0.08] p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-200">Cotacao reaberta</p>
+                <h3 className="mt-2 text-lg font-semibold text-white">{sharedQuoteSummary?.productName || 'Cotacao compartilhada'}</h3>
+                <div className="mt-3 grid gap-3 text-sm text-slate-200 sm:grid-cols-2">
+                  <div>
+                    <p className="text-slate-400">Cliente</p>
+                    <p className="mt-1 font-medium text-white">{persistedQuote.nome_cliente || 'Cliente nao informado'}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-400">Data</p>
+                    <p className="mt-1 font-medium text-white">{formatQuoteDate(typeof persistedQuote.data === 'string' ? persistedQuote.data.substring(0, 10) : draft.date)}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-400">Canal</p>
+                    <p className="mt-1 font-medium text-white">{getSaleChannel(getSaleChannelFromQuote(persistedQuote.sale_channel), settings).label}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-400">Valor total salvo</p>
+                    <p className="mt-1 font-medium text-cyan-100">{formatCurrency(persistedQuote.valor_total)}</p>
+                  </div>
+                </div>
+                <p className="mt-4 text-sm leading-6 text-slate-300">Voce pode ajustar esta base e salvar novamente. O salvamento cria uma nova cotacao, sem sobrescrever o registro anterior.</p>
+              </div>
+            ) : null}
+
+            <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-2">
+              <PricingCard
+                label="Custo do produto (unidade)"
+                value={unitProductCost}
+                formatter={formatCurrency}
+                description={"Formula: custo total / quantidade.\n\nConsidera a divisao do custo total da cotacao pela quantidade informada, incluindo custo tecnico, mao de obra e embalagem."}
+                actionAriaLabel="Abrir memoria de calculo do custo do produto"
+                actionIcon={(
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-3.5 w-3.5" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75H18" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 12H18" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 17.25H18" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 6.75h.008v.008H4.5z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12h.008v.008H4.5z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 17.25h.008v.008H4.5z" />
+                  </svg>
+                )}
+                onActionClick={() => setIsUnitCostBreakdownOpen(true)}
+              />
+              <PricingCard label="Valor de venda (unidade)" value={averageUnitPrice} formatter={formatCurrency} description={"Formula: valor venda total / quantidade.\n\nRepresenta o preco medio de venda de cada unidade depois da aplicacao da margem do canal escolhido."} tone="warm" />
+              <PricingCard label="Custo total" value={productionCost} formatter={formatCurrency} description={"Formula: custo tecnico total + mao de obra + embalagem.\n\nO custo tecnico total soma material, energia e amortizacao da impressora multiplicados pela quantidade."} />
+              <PricingCard label="Valor venda total" value={suggestedPrice} formatter={formatCurrency} description={"Formula: custo total x (1 + margem / 100).\n\nEste e o valor final sugerido para a cotacao completa com a margem comercial aplicada."} tone="accent" emphasize />
+              <div className="sm:col-span-2 xl:col-span-2">
+                <PricingCard label="Lucro liquido" value={netProfit} formatter={formatCurrency} description={"Formula: valor venda total - custo total.\n\nMostra quanto sobra na cotacao depois de cobrir o custo tecnico e os custos operacionais adicionais."} tone="success" />
+              </div>
+            </div>
+
+            {isAuthenticated && publicShareUrl ? (
+              <div className="mt-6 rounded-[28px] border border-white/10 bg-white/[0.04] p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Link publico</p>
+                    <p className="mt-1 text-sm leading-6 text-slate-300">Use este link para abrir a cotacao direto na plataforma.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCopyShareLink}
+                    disabled={isSharingLink}
+                    className="rounded-xl border border-cyan-400/20 bg-cyan-400/[0.08] px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200 transition hover:border-cyan-300/35 hover:bg-cyan-300/[0.14] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.04] disabled:text-slate-500"
+                  >
+                    Copiar
+                  </button>
+                </div>
+                <div className="mt-3 rounded-2xl border border-white/10 bg-[#0a1228]/70 px-4 py-3 text-sm font-medium text-slate-200">
+                  <span className="break-all">{publicShareUrl}</span>
                 </div>
               </div>
             ) : null}
-          </div>
-        ))}
-      </div>
 
-      {!filteredQuotes.length ? (
-        <div className="mt-8 rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center text-sm text-slate-500">
-          Nenhum orçamento encontrado para os filtros informados.
+            <div className="mt-auto flex items-center gap-3 pt-6">
+              {isAuthenticated ? (
+                  <button
+                    type="button"
+                    onClick={handleCopyShareLink}
+                    disabled={!canShareQuote || isSharingLink}
+                    aria-label="Gerar e copiar link publico da cotacao"
+                    className={`inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border transition ${
+                      canShareQuote && !isSharingLink
+                        ? 'border-cyan-400/25 bg-cyan-400/[0.08] text-cyan-200 hover:border-cyan-300/45 hover:bg-cyan-300/[0.14]'
+                        : 'cursor-not-allowed border-white/10 bg-white/[0.04] text-slate-500'
+                    }`}
+                    title={canShareQuote ? 'Gerar e copiar link publico da cotacao' : 'Preencha e salve a cotacao para copiar o link publico'}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5" aria-hidden="true">
+                      <rect x="9" y="9" width="10" height="10" rx="2" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 15H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1" />
+                    </svg>
+                  </button>
+              ) : null}
+
+              <button
+                type="submit"
+                disabled={isSubmitDisabled}
+                className="w-full rounded-2xl bg-cyan-400 px-5 py-4 text-sm font-semibold text-slate-950 shadow-[0_18px_40px_rgba(34,211,238,0.22)] transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+              >
+                Salvar cotacao
+              </button>
+            </div>
+          </aside>
         </div>
-      ) : null}
 
-      {totalPages > 1 && <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />}
+        <section className="rounded-[34px] border border-white/10 bg-white/[0.035] p-5 shadow-[0_24px_90px_rgba(0,0,0,0.24)] backdrop-blur-2xl sm:p-6">
+          <div className="flex flex-col gap-4 border-b border-white/10 pb-5 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Historico operacional</p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-white">Cotacoes recentes para consulta rapida</h2>
+            </div>
+            <p className="text-sm text-slate-400">A proposta fica comercialmente legivel sem abrir telas auxiliares.</p>
+          </div>
+
+          <div className="mt-6 grid gap-4 xl:grid-cols-4">
+            {!isAuthenticated ? (
+              <div className="rounded-[30px] border border-dashed border-cyan-400/25 bg-cyan-400/[0.06] p-6 text-sm leading-7 text-slate-300 xl:col-span-4">
+                O historico salvo fica vinculado ao tenant da conta autenticada.
+                <div className="mt-4">
+                  <Link to="/login" className="inline-flex rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300">
+                    Entrar para liberar historico
+                  </Link>
+                </div>
+              </div>
+            ) : recentQuotes.length ? (
+              recentQuotes.map((quote) => {
+                const { productName, unitCost } = getQuotePrimarySummary(quote);
+
+                return (
+                  <Link key={quote.id} to={`/quotes?quote=${quote.id}`} className="block rounded-[30px] border border-white/10 bg-[#0a1228]/78 p-5 shadow-[0_18px_60px_rgba(0,0,0,0.2)] transition hover:border-cyan-400/35 hover:bg-cyan-400/[0.08]">
+                    <h3 className="mt-3 text-lg font-semibold text-white">{productName}</h3>
+                    <p className="mt-2 text-xl font-semibold tracking-[-0.03em] text-cyan-200">{unitCost !== null ? formatCurrency(unitCost) : 'Custo unitario nao informado'}</p>
+                    <div className="mt-3 flex flex-wrap gap-2">{renderChannelPriceBadges(unitCost, saleChannels)}</div>
+                    <div className="mt-4 space-y-1 text-sm text-slate-400">
+                      <p>{quote.nome_cliente}</p>
+                      <p>{formatQuoteTimestamp(quote.createdAt)}</p>
+                    </div>
+                  </Link>
+                );
+              })
+            ) : (
+              <div className="rounded-[30px] border border-dashed border-white/10 bg-[#0a1228]/60 p-6 text-sm leading-6 text-slate-400 xl:col-span-4">
+                Ainda nao ha historico salvo nesta base. Monte a primeira cotacao acima e use o painel dominante como referencia principal.
+              </div>
+            )}
+          </div>
+        </section>
+
+        <div className="fixed inset-x-4 bottom-4 z-30 lg:hidden">
+          <div className="rounded-[28px] border border-white/10 bg-[#081120]/92 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.32)] backdrop-blur-2xl">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Live total</p>
+                <p className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-white">{formatCurrency(suggestedPrice)}</p>
+              </div>
+              <div className="flex items-center gap-3">
+                {isAuthenticated ? (
+                  <button
+                    type="button"
+                    onClick={handleCopyShareLink}
+                    disabled={!canShareQuote || isSharingLink}
+                    aria-label="Gerar e copiar link publico da cotacao"
+                    className={`inline-flex h-11 w-11 items-center justify-center rounded-2xl border transition ${
+                      canShareQuote && !isSharingLink
+                        ? 'border-cyan-400/25 bg-cyan-400/[0.08] text-cyan-200 hover:border-cyan-300/45 hover:bg-cyan-300/[0.14]'
+                        : 'cursor-not-allowed border-white/10 bg-white/[0.04] text-slate-500'
+                    }`}
+                    title={canShareQuote ? 'Gerar e copiar link publico da cotacao' : 'Preencha e salve a cotacao para copiar o link publico'}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4.5 w-4.5" aria-hidden="true">
+                      <rect x="9" y="9" width="10" height="10" rx="2" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 15H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1" />
+                    </svg>
+                  </button>
+                ) : null}
+
+                <button
+                  type="submit"
+                  disabled={isSubmitDisabled}
+                  className="rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                >
+                  Salvar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </form>
+
+      {unitCostBreakdownModal}
+      {clientPickerModal}
     </div>
   );
 }

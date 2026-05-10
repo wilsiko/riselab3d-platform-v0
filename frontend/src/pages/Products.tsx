@@ -1,488 +1,224 @@
-import { useEffect, useState, FormEvent } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import api from '../api';
-import { Filament, Product, ProductColor } from '../types';
-import { Loading } from '../components/Loading';
 import { Alert } from '../components/Alert';
+import { Loading } from '../components/Loading';
+import { NumericInput } from '../components/NumericInput';
 import { Pagination } from '../components/Pagination';
-import { formatCurrency, formatDecimalInput, parseDecimalInput, parseNumberInputValue } from '../utils/numberFormat';
+import { SummaryWidget } from '../components/SummaryWidget';
+import { Filament, Printer, Product } from '../types';
+import { parseLocaleNumber } from '../utils/number';
 
-const ITEMS_PER_PAGE = 5;
+const ITEMS_PER_PAGE = 6;
 
 interface ProductForm {
   nome: string;
   cor: string;
   variacao: string;
-  peso_gramas: string;
-  tempo_impressao_horas: string;
+  peso_gramas: number;
+  tempo_impressao_horas: number;
+  printerId: string;
   filamentId: string;
-  additional_cost: string;
-  falha_percentual: number | '';
+  additional_cost: number;
 }
 
-function buildSkuPreview(nome: string, cor: string, variacao: string) {
-  const toPascalCaseSegment = (value: string) =>
-    value
-      .trim()
-      .split(/\s+/)
-      .filter(Boolean)
-      .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1).toLowerCase())
-      .join('');
-
-  return [nome, cor, variacao].map(toPascalCaseSegment).join('');
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 }
 
 export default function Products() {
+  const [printers, setPrinters] = useState<Printer[]>([]);
   const [filaments, setFilaments] = useState<Filament[]>([]);
-  const [productColors, setProductColors] = useState<ProductColor[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [editingProductId, setEditingProductId] = useState<string | null>(null);
-  const [showInactive, setShowInactive] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [form, setForm] = useState<ProductForm>({
     nome: '',
     cor: '',
     variacao: '',
-    peso_gramas: '50,00',
-    tempo_impressao_horas: '1,00',
+    peso_gramas: 50,
+    tempo_impressao_horas: 1,
+    printerId: '',
     filamentId: '',
-    additional_cost: '0,00',
-    falha_percentual: 10,
+    additional_cost: 0,
   });
   const [result, setResult] = useState<Product | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const paginatedProducts = products.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE,
-  );
+  const paginatedProducts = products.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
   const totalPages = Math.ceil(products.length / ITEMS_PER_PAGE);
-  const skuPreview = buildSkuPreview(form.nome, form.cor, form.variacao);
-
-  const resetForm = () => {
-    setEditingProductId(null);
-    setForm({
-      nome: '',
-      cor: '',
-      variacao: '',
-      peso_gramas: '50,00',
-      tempo_impressao_horas: '1,00',
-      filamentId: '',
-      additional_cost: '0,00',
-      falha_percentual: 10,
-    });
-  };
-
-  const loadData = async (includeInactive: boolean) => {
-    setIsLoading(true);
-
-    try {
-      const [filamentsRes, productColorsRes, productsRes] = await Promise.all([
-        api.get<Filament[]>('/filaments'),
-        api.get<ProductColor[]>('/product-colors'),
-        api.get<Product[]>('/products', { params: includeInactive ? { includeInactive: true } : undefined }),
-      ]);
-      setFilaments(filamentsRes.data);
-      setProductColors(productColorsRes.data);
-      setProducts(productsRes.data);
-    } catch (err: any) {
-      setError(err?.response?.data?.error || 'Erro ao carregar dados');
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   useEffect(() => {
-    loadData(showInactive);
-  }, [showInactive]);
+    const loadData = async () => {
+      try {
+        setIsLoading(true);
+        const [printersRes, filamentsRes, productsRes] = await Promise.all([
+          api.get<Printer[]>('/printers'),
+          api.get<Filament[]>('/filaments'),
+          api.get<Product[]>('/products'),
+        ]);
+        setPrinters(printersRes.data);
+        setFilaments(filamentsRes.data);
+        setProducts(productsRes.data);
+      } catch (requestError: any) {
+        setError(requestError?.response?.data?.error || 'Erro ao carregar dados do catalogo de produtos.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadData();
+  }, []);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
     setSuccess(null);
-    setResult(null);
     setIsLoading(true);
 
-    if (form.peso_gramas === '' || form.tempo_impressao_horas === '' || form.falha_percentual === '') {
-      setError('Preencha peso, tempo de impressão e falhas estimadas antes de salvar o produto.');
-      setIsLoading(false);
-      return;
-    }
-
-    const parsedWeight = parseDecimalInput(form.peso_gramas);
-    const parsedPrintTime = parseDecimalInput(form.tempo_impressao_horas);
-
-    if (!Number.isFinite(parsedWeight) || parsedWeight <= 0) {
-      setError('O peso deve ser um valor válido maior que zero.');
-      setIsLoading(false);
-      return;
-    }
-
-    if (!Number.isFinite(parsedPrintTime) || parsedPrintTime <= 0) {
-      setError('O tempo de impressão deve ser um valor válido maior que zero.');
-      setIsLoading(false);
-      return;
-    }
-
-    if (/\s/.test(form.nome.trim())) {
-      setError('O nome do produto deve conter apenas uma palavra.');
-      setIsLoading(false);
-      return;
-    }
-
     try {
-      const payload = {
-        ...form,
-        peso_gramas: parsedWeight,
-        tempo_impressao_horas: parsedPrintTime,
-        falha_percentual: Number(form.falha_percentual),
-        additional_cost: parseDecimalInput(form.additional_cost),
-      };
-      const response = editingProductId
-        ? await api.put(`/products/${editingProductId}`, payload)
-        : await api.post('/products', payload);
+      const response = await api.post('/products', form);
       setResult(response.data.product);
-      setProducts((prev) => {
-        if (editingProductId) {
-          return prev.map((product) => (product.id === editingProductId ? response.data.product : product));
-        }
-
-        return [...prev, response.data.product];
-      });
-      setSuccess(editingProductId ? 'Produto atualizado com sucesso!' : 'Produto criado com sucesso!');
-      resetForm();
-      setTimeout(() => setSuccess(null), 3000);
-    } catch (err: any) {
-      const errorMessage = err?.response?.data?.error || err?.response?.data?.errors?.[0]?.message || 'Erro ao salvar produto';
+      setProducts((previousProducts) => [...previousProducts, response.data.product]);
+      setSuccess('Produto criado com sucesso e liberado para o fluxo de cotacoes.');
+      setForm((currentForm) => ({ ...currentForm, nome: '', cor: '', variacao: '' }));
+    } catch (requestError: any) {
+      const errorMessage = requestError?.response?.data?.error || requestError?.response?.data?.errors?.[0]?.message || 'Erro ao criar produto';
       setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleEdit = (product: Product) => {
-    setEditingProductId(product.id);
-    setError(null);
-    setSuccess(null);
-    setResult(null);
-    setForm({
-      nome: product.nome,
-      cor: product.cor,
-      variacao: product.variacao,
-      peso_gramas: formatDecimalInput(product.peso_gramas),
-      tempo_impressao_horas: formatDecimalInput(product.tempo_impressao_horas),
-      filamentId: product.filament.id,
-      additional_cost: formatDecimalInput(product.custo_adicional),
-      falha_percentual: product.falha_percentual,
-    });
-  };
-
-  const handleCancelEdit = () => {
-    setError(null);
-    setSuccess(null);
-    setResult(null);
-    resetForm();
-  };
-
-  const handleDelete = async (product: Product) => {
-    if (!window.confirm(`Deseja realmente desativar o produto ${product.sku}?`)) {
-      return;
-    }
-
-    setError(null);
-    setSuccess(null);
-
-    try {
-      await api.delete(`/products/${product.id}`);
-
-      if (showInactive) {
-        await loadData(true);
-      } else {
-        setProducts((currentProducts) => currentProducts.filter((currentProduct) => currentProduct.id !== product.id));
-      }
-
-      if (editingProductId === product.id) {
-        resetForm();
-      }
-
-      setSuccess('Produto desativado com sucesso.');
-    } catch (requestError: any) {
-      setError(requestError?.response?.data?.error || 'Erro ao desativar produto.');
-    }
-  };
-
-  const handleReactivate = async (product: Product) => {
-    setError(null);
-    setSuccess(null);
-
-    try {
-      const response = await api.patch<Product>(`/products/${product.id}/reactivate`);
-
-      if (showInactive) {
-        setProducts((currentProducts) => currentProducts.map((currentProduct) => (currentProduct.id === product.id ? response.data : currentProduct)));
-      } else {
-        setProducts((currentProducts) => [...currentProducts, response.data]);
-      }
-
-      setSuccess('Produto reativado com sucesso.');
-    } catch (requestError: any) {
-      setError(requestError?.response?.data?.error || 'Erro ao reativar produto.');
-    }
-  };
-
   return (
-    <div>
-      <Loading isLoading={isLoading} label="Processando..." />
-      
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-semibold text-slate-900">Produtos / SKU</h1>
-          <p className="mt-2 text-slate-600">Crie SKUs com cálculo automático de custo e amortização.</p>
+    <div className="space-y-8">
+      <Loading isLoading={isLoading} label="Sincronizando produtos e custos..." />
+
+      <section className="rounded-[34px] border border-white/10 bg-[linear-gradient(135deg,rgba(8,14,30,0.96),rgba(7,24,44,0.96),rgba(34,211,238,0.12))] p-8 shadow-[0_28px_90px_rgba(0,0,0,0.28)]">
+        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-200">Design de SKU</p>
+        <h1 className="mt-4 text-4xl font-semibold tracking-[-0.05em] text-white">Produtos com contexto tecnico claro e custo pronto para cotacao.</h1>
+        <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-300">
+          Esta tela deixa de ser um formulario frio e vira um atelier de SKU. Cada item nasce com material, impressora e custo base prontos para o espaco comercial.
+        </p>
+      </section>
+
+      {error ? <Alert type="error" message={error} onClose={() => setError(null)} /> : null}
+      {success ? <Alert type="success" message={success} onClose={() => setSuccess(null)} /> : null}
+
+      <section className="grid gap-4 md:grid-cols-3">
+        <SummaryWidget label="Produtos ativos" value={String(products.length)} description="SKUs prontos para entrar na cotacao sem digitacao manual." />
+        <SummaryWidget label="Perfis tecnicos" value={String(printers.length + filaments.length)} description="Soma de impressoras e materiais disponiveis para combinacao." />
+        <SummaryWidget label="Ultimo custo" value={result ? formatCurrency(result.custo_total) : 'Aguardando'} description="Resultado mais recente criado nesta sessao." />
+      </section>
+
+      <form onSubmit={handleSubmit} className="rounded-[34px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_22px_70px_rgba(0,0,0,0.22)]">
+        <div className="border-b border-white/10 pb-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-200">Novo SKU</p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-white">Montar novo produto</h2>
         </div>
-        <label className="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 shadow-sm">
-          <input
-            type="checkbox"
-            checked={showInactive}
-            onChange={(event) => setShowInactive(event.target.checked)}
-            className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-400"
-          />
-          Exibir desativados
-        </label>
-      </div>
 
-      {error && <Alert type="error" message={error} onClose={() => setError(null)} />}
-      {success && <Alert type="success" message={success} onClose={() => setSuccess(null)} />}
+        <div className="mt-6 grid gap-4 xl:grid-cols-2">
+          <label className="block rounded-[28px] border border-white/10 bg-[#0a1228]/78 p-4">
+            <span className="mb-2 block text-sm font-medium text-slate-200">Nome do produto</span>
+            <input value={form.nome} onChange={(event) => setForm({ ...form, nome: event.target.value })} className="w-full rounded-2xl border border-white/10 bg-[#081120] p-3 text-white" required />
+          </label>
 
-      {editingProductId ? (
-        <div className="mb-6 rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-900">
-          Editando produto existente. Atualize os campos abaixo e salve para aplicar as mudanças.
+          <label className="block rounded-[28px] border border-white/10 bg-[#0a1228]/78 p-4">
+            <span className="mb-2 block text-sm font-medium text-slate-200">Cor</span>
+            <input value={form.cor} onChange={(event) => setForm({ ...form, cor: event.target.value })} className="w-full rounded-2xl border border-white/10 bg-[#081120] p-3 text-white" required />
+          </label>
+
+          <label className="block rounded-[28px] border border-white/10 bg-[#0a1228]/78 p-4">
+            <span className="mb-2 block text-sm font-medium text-slate-200">Variacao</span>
+            <input value={form.variacao} onChange={(event) => setForm({ ...form, variacao: event.target.value })} className="w-full rounded-2xl border border-white/10 bg-[#081120] p-3 text-white" required />
+          </label>
+
+          <NumericInput label="Peso" value={String(form.peso_gramas)} onChange={(value) => setForm({ ...form, peso_gramas: parseLocaleNumber(value) })} suffix="g" hint="massa" />
+          <NumericInput label="Tempo de impressao" value={String(form.tempo_impressao_horas)} onChange={(value) => setForm({ ...form, tempo_impressao_horas: parseLocaleNumber(value) })} suffix="h" hint="job" />
+          <NumericInput label="Custos adicionais" value={String(form.additional_cost)} onChange={(value) => setForm({ ...form, additional_cost: parseLocaleNumber(value) })} prefix="R$" hint="extra" />
+
+          <label className="block rounded-[28px] border border-white/10 bg-[#0a1228]/78 p-4">
+            <span className="mb-2 block text-sm font-medium text-slate-200">Impressora</span>
+            <select value={form.printerId} onChange={(event) => setForm({ ...form, printerId: event.target.value })} className="w-full rounded-2xl border border-white/10 bg-[#081120] p-3 text-white" required>
+              <option value="">Selecione</option>
+              {printers.map((printer) => (
+                <option key={printer.id} value={printer.id}>
+                  {printer.nome}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block rounded-[28px] border border-white/10 bg-[#0a1228]/78 p-4">
+            <span className="mb-2 block text-sm font-medium text-slate-200">Material</span>
+            <select value={form.filamentId} onChange={(event) => setForm({ ...form, filamentId: event.target.value })} className="w-full rounded-2xl border border-white/10 bg-[#081120] p-3 text-white" required>
+              <option value="">Selecione</option>
+              {filaments.map((filament) => (
+                <option key={filament.id} value={filament.id}>
+                  {filament.marca} / {filament.tipo}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
-      ) : null}
 
-      <form onSubmit={handleSubmit} className="grid gap-4 rounded-3xl border border-slate-200 bg-slate-50 p-6 shadow-sm xl:grid-cols-2">
-        <label className="space-y-2 text-sm text-slate-700">
-          Nome do produto
-          <input
-            value={form.nome}
-            onChange={(e) => setForm({ ...form, nome: e.target.value.replace(/\s+/g, '') })}
-            className="form-control"
-            placeholder="Ex: Suporte"
-            required
-          />
-          <p className="text-xs text-slate-500">Use apenas uma palavra para o nome do produto.</p>
-        </label>
-        <label className="space-y-2 text-sm text-slate-700">
-          Cor
-          <select value={form.cor} onChange={(e) => setForm({ ...form, cor: e.target.value })} className="form-control" required>
-            <option value="">Selecione uma cor</option>
-            {productColors.map((color) => (
-              <option key={color.id} value={color.name}>
-                {color.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="space-y-2 text-sm text-slate-700">
-          Variação
-          <input value={form.variacao} onChange={(e) => setForm({ ...form, variacao: e.target.value })} className="form-control" required />
-        </label>
-        <label className="space-y-2 text-sm text-slate-700">
-          Peso (g)
-          <input
-            type="text"
-            inputMode="decimal"
-            value={form.peso_gramas}
-            onChange={(e) => setForm({ ...form, peso_gramas: e.target.value })}
-            onBlur={() => {
-              const parsedValue = parseDecimalInput(form.peso_gramas);
-
-              if (Number.isFinite(parsedValue)) {
-                setForm((currentForm) => ({
-                  ...currentForm,
-                  peso_gramas: formatDecimalInput(parsedValue),
-                }));
-              }
-            }}
-            className="form-control"
-            placeholder="Ex: 50,50"
-            required
-          />
-        </label>
-        <label className="space-y-2 text-sm text-slate-700">
-          Tempo de impressão (h)
-          <input
-            type="text"
-            inputMode="decimal"
-            value={form.tempo_impressao_horas}
-            onChange={(e) => setForm({ ...form, tempo_impressao_horas: e.target.value })}
-            onBlur={() => {
-              const parsedValue = parseDecimalInput(form.tempo_impressao_horas);
-
-              if (Number.isFinite(parsedValue)) {
-                setForm((currentForm) => ({
-                  ...currentForm,
-                  tempo_impressao_horas: formatDecimalInput(parsedValue),
-                }));
-              }
-            }}
-            className="form-control"
-            placeholder="Ex: 1,50"
-            required
-          />
-        </label>
-        <label className="space-y-2 text-sm text-slate-700">
-          Filamento
-          <select value={form.filamentId} onChange={(e) => setForm({ ...form, filamentId: e.target.value })} className="form-control" required>
-            <option value="">Selecione</option>
-            {filaments.map((filament) => (
-              <option key={filament.id} value={filament.id}>
-                {filament.marca} / {filament.tipo}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="space-y-2 text-sm text-slate-700">
-          Custos adicionais
-          <input
-            type="text"
-            inputMode="decimal"
-            value={form.additional_cost}
-            onChange={(e) => setForm({ ...form, additional_cost: e.target.value })}
-            onBlur={() => {
-              const parsedValue = parseDecimalInput(form.additional_cost);
-
-              if (Number.isFinite(parsedValue)) {
-                setForm((currentForm) => ({
-                  ...currentForm,
-                  additional_cost: formatDecimalInput(parsedValue),
-                }));
-              }
-            }}
-            className="form-control"
-          />
-        </label>
-        <label className="space-y-2 text-sm text-slate-700">
-          Falhas estimadas (%)
-          <input type="number" min="0" step="0.1" value={form.falha_percentual} onChange={(e) => setForm({ ...form, falha_percentual: parseNumberInputValue(e.target.value) })} className="form-control" />
-        </label>
-        <div className="xl:col-span-2">
-          <div className="mb-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
-            <span className="font-medium text-slate-900">SKU previsto:</span>{' '}
-            {skuPreview || 'Preencha nome, cor e variação'}
-          </div>
-          <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            A impressora será escolhida no momento do orçamento e o custo final será recalculado com base nela.
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <button type="submit" className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700">
-              {editingProductId ? 'Salvar alterações' : 'Criar produto e SKU'}
-            </button>
-            {editingProductId ? (
-              <button type="button" onClick={handleCancelEdit} className="rounded-2xl border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
-                Cancelar edição
-              </button>
-            ) : null}
-          </div>
-        </div>
+        <button type="submit" className="mt-6 rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300">
+          Criar produto e SKU
+        </button>
       </form>
 
-      {result && (
-        <div className="mt-8 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-xl font-semibold text-slate-900">Produto salvo</h2>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            <div className="rounded-3xl bg-slate-50 p-4">
-              <p className="text-sm text-slate-500">SKU</p>
-              <p className="mt-2 text-lg font-semibold text-slate-900">{result.sku}</p>
-            </div>
-            <div className="rounded-3xl bg-slate-50 p-4">
-              <p className="text-sm text-slate-500">Produto</p>
-              <p className="mt-2 text-lg font-semibold text-slate-900">{result.nome}</p>
-            </div>
-            <div className="rounded-3xl bg-slate-50 p-4">
-              <p className="text-sm text-slate-500">Custo total</p>
-              <p className="mt-2 text-lg font-semibold text-slate-900">{formatCurrency(result.custo_total)}</p>
-            </div>
-            <div className="rounded-3xl bg-slate-50 p-4">
-              <p className="text-sm text-slate-500">Falhas estimadas</p>
-              <p className="mt-2 text-lg font-semibold text-slate-900">{result.falha_percentual.toFixed(1)}%</p>
-            </div>
+      {result ? (
+        <section className="rounded-[34px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_22px_70px_rgba(0,0,0,0.22)]">
+          <h2 className="text-2xl font-semibold tracking-[-0.04em] text-white">Produto criado</h2>
+          <div className="mt-5 grid gap-4 md:grid-cols-3">
+            <SummaryWidget label="SKU" value={result.sku} description="Codigo pronto para compor biblioteca e historico." />
+            <SummaryWidget label="Produto" value={result.nome} description="Nome comercial salvo nesta sessao." />
+            <SummaryWidget label="Custo total" value={formatCurrency(result.custo_total)} description="Base financeira que alimenta a cotacao." />
           </div>
-        </div>
-      )}
+        </section>
+      ) : null}
 
-      <div className="mt-8 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-        <div className="grid grid-cols-[1.1fr_0.8fr_0.8fr_0.8fr_0.8fr_1fr_1fr_1fr_180px] gap-4 bg-slate-50 p-6 text-sm font-semibold text-slate-500">
-          <span>SKU</span>
-          <span>Nome</span>
-          <span>Cor</span>
-          <span>Tempo</span>
-          <span>Falhas</span>
-          <span>Custo Total</span>
-          <span>Filamento</span>
-          <span>Status</span>
-          <span className="text-right">Ações</span>
+      <section className="rounded-[34px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_22px_70px_rgba(0,0,0,0.22)]">
+        <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-5">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">SKU library</p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-white">Produtos registrados</h2>
+          </div>
+          <p className="text-sm text-slate-400">Cards legiveis e prontos para consulta rapida.</p>
         </div>
-        <div className="divide-y divide-slate-200">
+
+        <div className="mt-6 grid gap-4 xl:grid-cols-2">
           {paginatedProducts.map((product) => (
-            <div key={product.id} className="grid grid-cols-[1.1fr_0.8fr_0.8fr_0.8fr_0.8fr_1fr_1fr_1fr_180px] gap-4 px-6 py-4 text-sm text-slate-700">
-              <span>{product.sku}</span>
-              <span>{product.nome}</span>
-              <span>{product.cor}</span>
-              <span>{product.tempo_impressao_horas}h</span>
-              <span>{product.falha_percentual.toFixed(1)}%</span>
-              <span>{formatCurrency(product.custo_total)}</span>
-              <span>{product.filament.marca}</span>
-              <span>
-                {product.data_desativacao ? `Desativado em ${new Date(product.data_desativacao).toLocaleDateString()}` : 'Ativo'}
-              </span>
-              <div className="flex justify-end gap-2">
-                {!product.data_desativacao ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => handleEdit(product)}
-                      className="rounded-xl border border-cyan-200 px-3 py-2 font-medium text-cyan-700 transition hover:bg-cyan-50"
-                    >
-                      Editar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(product)}
-                      className="inline-flex items-center justify-center rounded-xl border border-rose-200 px-3 py-2 font-medium text-rose-700 transition hover:bg-rose-50"
-                      title="Desativar produto"
-                      aria-label={`Desativar produto ${product.sku}`}
-                    >
-                      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <path d="M3 6h18" />
-                        <path d="M8 6V4h8v2" />
-                        <path d="M19 6l-1 14H6L5 6" />
-                        <path d="M10 11v6" />
-                        <path d="M14 11v6" />
-                      </svg>
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => handleReactivate(product)}
-                    className="inline-flex items-center justify-center rounded-xl border border-emerald-200 px-3 py-2 font-medium text-emerald-700 transition hover:bg-emerald-50"
-                    title="Reativar produto"
-                    aria-label={`Reativar produto ${product.sku}`}
-                  >
-                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M21 12a9 9 0 1 1-3.2-6.9" />
-                      <path d="M21 3v6h-6" />
-                    </svg>
-                  </button>
-                )}
+            <article key={product.id} className="rounded-[30px] border border-white/10 bg-[#0a1228]/78 p-5 shadow-[0_18px_60px_rgba(0,0,0,0.18)]">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">{product.sku}</p>
+                  <h3 className="mt-3 text-lg font-semibold text-white">{product.nome}</h3>
+                  <p className="mt-2 text-sm text-slate-400">{product.cor} • {product.variacao}</p>
+                </div>
+                <div className="rounded-full bg-cyan-400/12 px-4 py-2 text-sm font-semibold text-cyan-200">{formatCurrency(product.custo_total)}</div>
               </div>
-            </div>
+
+              <div className="mt-5 grid gap-3 md:grid-cols-3">
+                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Tempo</p>
+                  <p className="mt-2 text-sm font-semibold text-white">{product.tempo_impressao_horas} h</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Impressora</p>
+                  <p className="mt-2 text-sm font-semibold text-white">{product.printer.nome}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Material</p>
+                  <p className="mt-2 text-sm font-semibold text-white">{product.filament.marca}</p>
+                </div>
+              </div>
+            </article>
           ))}
         </div>
-      </div>
 
-      {totalPages > 1 && <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />}
+        {totalPages > 1 ? <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} /> : null}
+      </section>
     </div>
   );
 }

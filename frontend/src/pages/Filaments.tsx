@@ -1,274 +1,113 @@
-import { useEffect, useState, FormEvent } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import api from '../api';
 import { Alert } from '../components/Alert';
+import { Loading } from '../components/Loading';
+import { NumericInput } from '../components/NumericInput';
+import { SummaryWidget } from '../components/SummaryWidget';
 import { Filament } from '../types';
-import { formatCurrency, formatDecimalInput, parseDecimalInput } from '../utils/numberFormat';
+import { parseLocaleNumber } from '../utils/number';
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+}
 
 export default function Filaments() {
   const [filaments, setFilaments] = useState<Filament[]>([]);
-  const [editingFilamentId, setEditingFilamentId] = useState<string | null>(null);
-  const [showInactive, setShowInactive] = useState(false);
+  const [form, setForm] = useState({ marca: '', tipo: '', custo_por_kg: 120 });
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [form, setForm] = useState({ marca: '', lote: '', data_compra: '', tipo: '', custo_por_kg: '120,00' });
-
-  const resetForm = () => {
-    setEditingFilamentId(null);
-    setForm({ marca: '', lote: '', data_compra: '', tipo: '', custo_por_kg: '120,00' });
-  };
-
-  const loadFilaments = async (includeInactive: boolean) => {
-    const response = await api.get<Filament[]>('/filaments', { params: includeInactive ? { includeInactive: true } : undefined });
-    setFilaments(response.data);
-  };
 
   useEffect(() => {
-    loadFilaments(showInactive)
-      .catch((requestError: any) => {
-        setError(requestError?.response?.data?.error || 'Erro ao carregar filamentos.');
-      });
-  }, [showInactive]);
+    const loadFilaments = async () => {
+      try {
+        setIsLoading(true);
+        const response = await api.get<Filament[]>('/filaments');
+        setFilaments(response.data);
+      } catch (requestError: any) {
+        setError(requestError?.response?.data?.error || 'Nao foi possivel carregar os materiais.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadFilaments();
+  }, []);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
     setSuccess(null);
 
-    const custoPorKg = parseDecimalInput(form.custo_por_kg);
-
     try {
-      const payload = {
-        ...form,
-        custo_por_kg: custoPorKg,
-      };
-      const response = editingFilamentId
-        ? await api.put<Filament>(`/filaments/${editingFilamentId}`, payload)
-        : await api.post<Filament>('/filaments', payload);
-
-      setFilaments((currentFilaments) => {
-        if (editingFilamentId) {
-          return currentFilaments.map((filament) => (filament.id === editingFilamentId ? response.data : filament));
-        }
-
-        return [...currentFilaments, response.data];
-      });
-      resetForm();
-      setSuccess(editingFilamentId ? 'Filamento atualizado com sucesso.' : 'Filamento cadastrado com sucesso.');
+      setIsLoading(true);
+      const response = await api.post<Filament>('/filaments', form);
+      setFilaments((previousFilaments) => [...previousFilaments, response.data]);
+      setForm({ marca: '', tipo: '', custo_por_kg: 120 });
+      setSuccess('Material adicionado ao catalogo tecnico.');
     } catch (requestError: any) {
-      setError(requestError?.response?.data?.error || 'Erro ao salvar filamento.');
-    }
-  };
-
-  const handleEdit = (filament: Filament) => {
-    setError(null);
-    setSuccess(null);
-    setEditingFilamentId(filament.id);
-    setForm({
-      marca: filament.marca,
-      lote: filament.lote,
-      data_compra: filament.data_compra.slice(0, 10),
-      tipo: filament.tipo,
-      custo_por_kg: formatDecimalInput(filament.custo_por_kg),
-    });
-  };
-
-  const handleCancelEdit = () => {
-    setError(null);
-    setSuccess(null);
-    resetForm();
-  };
-
-  const handleDelete = async (filament: Filament) => {
-    if (!window.confirm(`Deseja realmente desativar o filamento ${filament.marca} / lote ${filament.lote}?`)) {
-      return;
-    }
-
-    setError(null);
-    setSuccess(null);
-
-    try {
-      await api.delete(`/filaments/${filament.id}`);
-      if (showInactive) {
-        await loadFilaments(true);
-      } else {
-        setFilaments((currentFilaments) => currentFilaments.filter((currentFilament) => currentFilament.id !== filament.id));
-      }
-
-      if (editingFilamentId === filament.id) {
-        resetForm();
-      }
-
-      setSuccess('Filamento desativado com sucesso.');
-    } catch (requestError: any) {
-      setError(requestError?.response?.data?.error || 'Erro ao desativar filamento.');
-    }
-  };
-
-  const handleReactivate = async (filament: Filament) => {
-    setError(null);
-    setSuccess(null);
-
-    try {
-      const response = await api.patch<Filament>(`/filaments/${filament.id}/reactivate`);
-
-      if (showInactive) {
-        setFilaments((currentFilaments) => currentFilaments.map((currentFilament) => (currentFilament.id === filament.id ? response.data : currentFilament)));
-      } else {
-        setFilaments((currentFilaments) => [...currentFilaments, response.data]);
-      }
-
-      setSuccess('Filamento reativado com sucesso.');
-    } catch (requestError: any) {
-      setError(requestError?.response?.data?.error || 'Erro ao reativar filamento.');
+      setError(requestError?.response?.data?.error || 'Nao foi possivel criar o material.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
-    <div>
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-semibold text-slate-900">Filamentos</h1>
-          <p className="mt-2 text-slate-600">Registre insumos e tipos de material dinamicamente.</p>
+    <div className="space-y-8">
+      <Loading isLoading={isLoading} label="Sincronizando materiais..." />
+
+      <section className="rounded-[34px] border border-white/10 bg-[linear-gradient(135deg,rgba(8,14,30,0.96),rgba(7,24,44,0.96),rgba(20,184,166,0.14))] p-8 shadow-[0_28px_90px_rgba(0,0,0,0.28)]">
+        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-teal-200">Perfis de material</p>
+        <h1 className="mt-4 text-4xl font-semibold tracking-[-0.05em] text-white">Perfis de material claros, consistentes e prontos para compor custo base.</h1>
+        <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-300">Cada material vira um ativo operacional com leitura comercial limpa, sem cair no visual pesado de cadastro interno.</p>
+      </section>
+
+      {error ? <Alert type="error" message={error} onClose={() => setError(null)} /> : null}
+      {success ? <Alert type="success" message={success} onClose={() => setSuccess(null)} /> : null}
+
+      <section className="grid gap-4 md:grid-cols-3">
+        <SummaryWidget label="Materiais ativos" value={String(filaments.length)} description="Perfis prontos para alimentar a cotacao e o SKU builder." />
+        <SummaryWidget label="Custo medio" value={formatCurrency(filaments.reduce((sum, filament) => sum + filament.custo_por_kg, 0) / (filaments.length || 1))} description="Faixa media de referencia financeira por kg." />
+        <SummaryWidget label="Cobertura" value={String(new Set(filaments.map((filament) => filament.tipo)).size)} description="Quantidade de tipos diferentes disponiveis na base." />
+      </section>
+
+      <form onSubmit={handleSubmit} className="rounded-[34px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_22px_70px_rgba(0,0,0,0.22)]">
+        <div className="border-b border-white/10 pb-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-teal-200">Novo material</p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-white">Adicionar material</h2>
         </div>
-        <label className="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 shadow-sm">
-          <input
-            type="checkbox"
-            checked={showInactive}
-            onChange={(event) => setShowInactive(event.target.checked)}
-            className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-400"
-          />
-          Exibir desativados
-        </label>
-      </div>
 
-      {error ? <div className="mb-6"><Alert type="error" message={error} onClose={() => setError(null)} /></div> : null}
-      {success ? <div className="mb-6"><Alert type="success" message={success} onClose={() => setSuccess(null)} /></div> : null}
-
-      {editingFilamentId ? (
-        <div className="mb-6 rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-900">
-          Editando filamento existente. Atualize os campos abaixo e salve para aplicar as mudanças.
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <label className="block rounded-[28px] border border-white/10 bg-[#0a1228]/78 p-4">
+            <span className="mb-2 block text-sm font-medium text-slate-200">Marca</span>
+            <input value={form.marca} onChange={(event) => setForm({ ...form, marca: event.target.value })} className="w-full rounded-2xl border border-white/10 bg-[#081120] p-3 text-white" placeholder="Ex: Prusa" required />
+          </label>
+          <label className="block rounded-[28px] border border-white/10 bg-[#0a1228]/78 p-4">
+            <span className="mb-2 block text-sm font-medium text-slate-200">Tipo</span>
+            <input value={form.tipo} onChange={(event) => setForm({ ...form, tipo: event.target.value })} className="w-full rounded-2xl border border-white/10 bg-[#081120] p-3 text-white" placeholder="Ex: PLA" required />
+          </label>
+          <NumericInput label="Custo por kg" value={String(form.custo_por_kg)} onChange={(value) => setForm({ ...form, custo_por_kg: parseLocaleNumber(value) })} prefix="R$" hint="kg" />
         </div>
-      ) : null}
 
-      <form onSubmit={handleSubmit} className="grid gap-4 rounded-3xl border border-slate-200 bg-slate-50 p-6 shadow-sm sm:grid-cols-2 xl:grid-cols-5">
-        <label className="space-y-2 text-sm text-slate-700">
-          Marca
-          <input value={form.marca} onChange={(e) => setForm({ ...form, marca: e.target.value })} className="form-control" placeholder="Ex: Prusa" required />
-        </label>
-        <label className="space-y-2 text-sm text-slate-700">
-          Lote
-          <input value={form.lote} onChange={(e) => setForm({ ...form, lote: e.target.value })} className="form-control" placeholder="Ex: L001" required />
-        </label>
-        <label className="space-y-2 text-sm text-slate-700">
-          Data de compra
-          <input type="date" value={form.data_compra} onChange={(e) => setForm({ ...form, data_compra: e.target.value })} className="form-control" required />
-        </label>
-        <label className="space-y-2 text-sm text-slate-700">
-          Tipo
-          <input value={form.tipo} onChange={(e) => setForm({ ...form, tipo: e.target.value })} className="form-control" placeholder="Ex: PLA" required />
-        </label>
-        <label className="space-y-2 text-sm text-slate-700">
-          Custo por kg
-          <input
-            type="text"
-            inputMode="decimal"
-            value={form.custo_por_kg}
-            onChange={(e) => setForm({ ...form, custo_por_kg: e.target.value })}
-            onBlur={() => {
-              const parsedValue = parseDecimalInput(form.custo_por_kg);
-
-              if (Number.isFinite(parsedValue)) {
-                setForm((currentForm) => ({
-                  ...currentForm,
-                  custo_por_kg: formatDecimalInput(parsedValue),
-                }));
-              }
-            }}
-            className="form-control"
-            placeholder="Ex: 120,50"
-            required
-          />
-        </label>
-        <div className="sm:col-span-2 xl:col-span-5">
-          <div className="flex flex-wrap gap-3">
-            <button type="submit" className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700">
-              {editingFilamentId ? 'Salvar alterações' : 'Adicionar filamento'}
-            </button>
-            {editingFilamentId ? (
-              <button type="button" onClick={handleCancelEdit} className="rounded-2xl border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
-                Cancelar edição
-              </button>
-            ) : null}
-          </div>
-        </div>
+        <button type="submit" className="mt-6 rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300">
+          Adicionar material
+        </button>
       </form>
 
-      <div className="mt-8 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-        <div className="grid grid-cols-[1fr_0.9fr_1fr_0.8fr_0.9fr_1fr_180px] gap-4 bg-slate-50 p-6 text-sm font-semibold text-slate-500">
-          <span>Marca</span>
-          <span>Lote</span>
-          <span>Data de compra</span>
-          <span>Tipo</span>
-          <span>Custo por kg</span>
-          <span>Status</span>
-          <span className="text-right">Ações</span>
-        </div>
-        <div className="divide-y divide-slate-200">
-          {filaments.map((filament) => (
-            <div key={filament.id} className="grid grid-cols-[1fr_0.9fr_1fr_0.8fr_0.9fr_1fr_180px] gap-4 px-6 py-4 text-sm text-slate-700">
-              <span>{filament.marca}</span>
-              <span>{filament.lote}</span>
-              <span>{new Date(filament.data_compra).toLocaleDateString()}</span>
-              <span>{filament.tipo}</span>
-              <span>{formatCurrency(filament.custo_por_kg)}</span>
-              <span>
-                {filament.data_desativacao ? `Desativado em ${new Date(filament.data_desativacao).toLocaleDateString()}` : 'Ativo'}
-              </span>
-              <div className="flex justify-end gap-2">
-                {!filament.data_desativacao ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => handleEdit(filament)}
-                      className="rounded-xl border border-cyan-200 px-3 py-2 font-medium text-cyan-700 transition hover:bg-cyan-50"
-                    >
-                      Editar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(filament)}
-                      className="inline-flex items-center justify-center rounded-xl border border-rose-200 px-3 py-2 font-medium text-rose-700 transition hover:bg-rose-50"
-                      title="Desativar filamento"
-                      aria-label={`Desativar filamento ${filament.marca} lote ${filament.lote}`}
-                    >
-                      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <path d="M3 6h18" />
-                        <path d="M8 6V4h8v2" />
-                        <path d="M19 6l-1 14H6L5 6" />
-                        <path d="M10 11v6" />
-                        <path d="M14 11v6" />
-                      </svg>
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => handleReactivate(filament)}
-                    className="inline-flex items-center justify-center rounded-xl border border-emerald-200 px-3 py-2 font-medium text-emerald-700 transition hover:bg-emerald-50"
-                    title="Reativar filamento"
-                    aria-label={`Reativar filamento ${filament.marca} lote ${filament.lote}`}
-                  >
-                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M21 12a9 9 0 1 1-3.2-6.9" />
-                      <path d="M21 3v6h-6" />
-                    </svg>
-                  </button>
-                )}
+      <section className="grid gap-4 xl:grid-cols-2">
+        {filaments.map((filament) => (
+          <article key={filament.id} className="rounded-[30px] border border-white/10 bg-[#0a1228]/78 p-5 shadow-[0_18px_60px_rgba(0,0,0,0.18)]">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Material profile</p>
+                <h3 className="mt-3 text-lg font-semibold text-white">{filament.tipo}</h3>
+                <p className="mt-2 text-sm text-slate-400">{filament.marca}</p>
               </div>
+              <div className="rounded-full bg-teal-400/12 px-4 py-2 text-sm font-semibold text-teal-200">{formatCurrency(filament.custo_por_kg)}</div>
             </div>
-          ))}
-        </div>
-      </div>
+          </article>
+        ))}
+      </section>
     </div>
   );
 }

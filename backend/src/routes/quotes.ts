@@ -1,292 +1,273 @@
 import { Router } from 'express';
 import PDFDocument from 'pdfkit';
+import { createOpaqueToken, getBaseUrl, getFrontendBaseUrl } from '../auth/utils';
 import { prisma } from '../prisma';
+import { calculateProductCosts } from '../services/cost';
 import { withFallback, mockData } from '../utils/dbFallback';
-import { applyMargin, buildQuotePricingOptions, calculateQuoteItemUnitPrice } from '../services/cost';
-import { parseDecimalValue } from '../utils/number';
+import { requireAuth } from '../middleware/auth';
 
 const router = Router();
 
-const SALE_TYPE_LABELS: Record<string, string> = {
-  venda_direta: 'Venda Direta',
+const SALE_CHANNEL_LABELS: Record<string, string> = {
+  direct: 'Venda direta',
   ecommerce: 'E-commerce',
-  consumidor_final: 'Usuario Final',
+  end_customer: 'Usuario final',
 };
 
-function resolveSaleTypeMargin(saleType: string, settings: ReturnType<typeof normalizeQuoteSettings>) {
-  if (saleType === 'venda_direta') {
-    return settings.margem_venda_direta;
-  }
-
-  if (saleType === 'ecommerce') {
-    return settings.margem_venda_ecommerce;
-  }
-
-  if (saleType === 'consumidor_final') {
-    return settings.margem_venda_consumidor_final;
-  }
-
-  throw new Error('Selecione uma modalidade de venda válida para o orçamento.');
-}
-
-function normalizeQuoteSettings(settings: any) {
-  return {
-    custo_kwh: settings?.custo_kwh ?? 0,
-    margem_venda_direta: settings?.margem_venda_direta ?? 20,
-    margem_venda_ecommerce: settings?.margem_venda_ecommerce ?? 35,
-    margem_venda_consumidor_final: settings?.margem_venda_consumidor_final ?? 50,
-    logo_data_url: settings?.logo_data_url ?? null,
-  };
-}
-
-function parseLogoDataUrl(logoDataUrl: string | null | undefined) {
-  if (!logoDataUrl) {
-    return null;
-  }
-
-  const match = logoDataUrl.match(/^data:(image\/(?:png|jpeg|jpg|webp));base64,(.+)$/);
-
-  if (!match) {
-    return null;
-  }
-
-  return {
-    mimeType: match[1],
-    buffer: Buffer.from(match[2], 'base64'),
-  };
-}
-
-function buildQuoteResponse(quote: any, settings: any) {
-  const normalizedSettings = normalizeQuoteSettings(settings);
-  const marginPercent = Number.isFinite(quote.margem_percentual)
-    ? quote.margem_percentual
-    : resolveSaleTypeMargin(quote.tipo_venda, normalizedSettings);
-  const totalCost = Number.isFinite(quote.valor_custo) ? quote.valor_custo : quote.valor_total;
-  const summaryItems = quote.items.map((item: any) => ({
-    productId: item.productId,
-    productName: item.product.nome,
-    productSku: item.product.sku,
-    quantity: item.quantidade,
-    printerId: item.printerId ?? null,
-    printerName: item.printer?.nome ?? null,
-    unitCost: item.preco_unitario,
-    subtotalCost: item.preco_unitario * item.quantidade,
-  }));
-
-  return {
-    ...quote,
-    summary: {
-      items: summaryItems,
-      totalCost,
-      selectedSaleType: quote.tipo_venda,
-      selectedSaleTypeLabel: SALE_TYPE_LABELS[quote.tipo_venda] ?? quote.tipo_venda,
-      selectedMarginPercent: marginPercent,
-      pricingOptions: buildQuotePricingOptions(totalCost, normalizedSettings),
-    },
-  };
-}
-
-async function buildQuoteItems(items: any[], tenantId: string, custoKwh: number) {
-  if (!Array.isArray(items) || items.length === 0) {
-    throw new Error('Adicione pelo menos um item ao orçamento.');
-  }
-
-  return Promise.all(
-    items.map(async (item: any) => {
-      const product = await prisma.product.findFirst({
-        where: { id: item.productId, tenantId, data_desativacao: null },
-      });
-
-      if (!product) {
-        throw new Error('Produto não encontrado ou desativado: ' + item.productId);
-      }
-
-      if (!item.printerId) {
-        throw new Error('Impressora é obrigatória para cada item do orçamento.');
-      }
-
-      const printer = await prisma.printer.findFirst({
-        where: { id: item.printerId, tenantId, data_desativacao: null },
-      });
-
-      if (!printer) {
-        throw new Error('Impressora não encontrada: ' + item.printerId);
-      }
-
-      const quantidade = Number(item.quantidade);
-
-      if (!Number.isFinite(quantidade) || quantidade <= 0) {
-        throw new Error('A quantidade de cada item deve ser maior que zero.');
-      }
-
-      const precoUnitario = calculateQuoteItemUnitPrice(product, printer, custoKwh);
-
-      return {
-        productId: item.productId,
-        printerId: item.printerId,
-        quantidade,
-        preco_unitario: precoUnitario,
-      };
-    }),
-  );
-}
-
 router.get('/', async (req, res) => {
-  const settings = await prisma.globalSettings.findUnique({ where: { tenantId: req.tenantId } });
+  if (!req.authUser) {
+    return requireAuth(req, res, () => undefined);
+  }
+
   const quotes = await withFallback(
     () =>
       prisma.quote.findMany({
         where: { tenantId: req.tenantId },
-        include: { items: { include: { product: true, printer: true } } },
+        include: { items: { include: { product: true } } },
         orderBy: { data: 'desc' },
       }),
     () => mockData.tenant1.quotes,
   );
-  res.json(quotes.map((quote: any) => buildQuoteResponse(quote, settings || mockData.tenant1.settings)));
+  res.json(quotes);
 });
 
 router.post('/', async (req, res) => {
+  if (!req.authUser) {
+    return requireAuth(req, res, () => undefined);
+  }
+
   try {
-    const { nome_cliente, data, items, tipo_venda } = req.body;
+    const { nome_cliente, data, items, notes, sale_channel, subtotal_custo, margem_percentual } = req.body;
+    const normalizedClientName = typeof nome_cliente === 'string' && nome_cliente.trim() ? nome_cliente.trim() : 'Cliente nao informado';
+
+    if (!Array.isArray(items) || !items.length) {
+      return res.status(400).json({ error: 'Envie pelo menos um item para salvar a cotacao.' });
+    }
+
+    const normalizedSaleChannel = typeof sale_channel === 'string' && sale_channel.trim() ? sale_channel : 'direct';
+    const normalizedMargin = Number.isFinite(Number(margem_percentual)) ? Number(margem_percentual) : 0;
     const settings = await prisma.globalSettings.findUnique({ where: { tenantId: req.tenantId } });
-    const normalizedSettings = normalizeQuoteSettings(settings || mockData.tenant1.settings);
 
-    if (!String(nome_cliente || '').trim()) {
-      throw new Error('Nome do cliente é obrigatório.');
+    const quoteItems = await Promise.all(
+      items.map(async (item: any) => {
+        if (!item.productId) {
+          const printer = await prisma.printer.findFirst({ where: { id: item.printerId, tenantId: req.tenantId } });
+
+          if (!printer) {
+            throw new Error('Impressora nao encontrada para a cotacao informada.');
+          }
+
+          const quantidade = Number(item.quantidade);
+          const materialWeightGrams = Number(item.materialWeightGrams);
+          const filamentCostPerKg = Number(item.filamentCostPerKg);
+          const printHours = Number(item.printHours);
+          const productName = typeof item.productName === 'string' && item.productName.trim() ? item.productName.trim() : 'Cotacao manual';
+          const resolvedFilamentCostPerKg = Number.isFinite(filamentCostPerKg) && filamentCostPerKg > 0 ? filamentCostPerKg : 0;
+          const filamentForQuote = {
+            id: 'manual-filament',
+            tenantId: req.tenantId,
+            marca: 'Manual',
+            tipo: 'Preco informado',
+            custo_por_kg: resolvedFilamentCostPerKg,
+          };
+          const costData = calculateProductCosts(
+            materialWeightGrams,
+            printHours,
+            printer,
+            filamentForQuote,
+            settings?.custo_kwh ?? 0,
+            0,
+          );
+          const precoUnitario = Number(item.preco_unitario ?? costData.custoTotal);
+          const subtotalCusto = costData.custoTotal * quantidade;
+          const subtotalPreco = precoUnitario * quantidade;
+
+          return {
+            productId: null,
+            quantidade,
+            preco_unitario: precoUnitario,
+            snapshot_nome: productName,
+            snapshot_sku: `MANUAL-${productName}`,
+            snapshot_material: `${materialWeightGrams} g - ${printHours} h - preco manual por kg`,
+            custo_base_unitario: costData.custoTotal,
+            subtotal_custo: subtotalCusto,
+            subtotal_preco: subtotalPreco,
+          };
+        }
+
+        const product = await prisma.product.findFirst({
+          where: { id: item.productId, tenantId: req.tenantId },
+          include: { filament: true },
+        });
+        if (!product) throw new Error('Produto nao encontrado para a cotacao informada.');
+
+        const quantidade = Number(item.quantidade);
+        const precoUnitario = Number(item.preco_unitario ?? product.custo_total);
+        const subtotalCusto = product.custo_total * quantidade;
+        const subtotalPreco = precoUnitario * quantidade;
+
+        return {
+          productId: item.productId,
+          quantidade,
+          preco_unitario: precoUnitario,
+          snapshot_nome: product.nome,
+          snapshot_sku: product.sku,
+          snapshot_material: `${product.filament.marca} ${product.filament.tipo}`,
+          custo_base_unitario: product.custo_total,
+          subtotal_custo: subtotalCusto,
+          subtotal_preco: subtotalPreco,
+        };
+      }),
+    );
+
+    const subtotalCalculado = quoteItems.reduce((sum, item) => sum + (item.subtotal_custo || 0), 0);
+    const valor_total = quoteItems.reduce((sum, item) => sum + item.quantidade * item.preco_unitario, 0);
+
+    if (normalizedClientName !== 'Cliente nao informado') {
+      const existingClient = await prisma.client.findFirst({
+        where: {
+          tenantId: req.tenantId,
+          name: {
+            equals: normalizedClientName,
+            mode: 'insensitive',
+          },
+        },
+      });
+
+      if (!existingClient) {
+        await prisma.client.create({
+          data: {
+            tenantId: req.tenantId,
+            name: normalizedClientName,
+          },
+        });
+      }
     }
-
-    if (!data) {
-      throw new Error('Data do orçamento é obrigatória.');
-    }
-
-    const margemPercentual = resolveSaleTypeMargin(String(tipo_venda || ''), normalizedSettings);
-
-    const quoteItems = await buildQuoteItems(items, req.tenantId, settings?.custo_kwh ?? 0);
-    const valor_custo = quoteItems.reduce((sum, item) => sum + item.quantidade * item.preco_unitario, 0);
-    const valor_total = applyMargin(valor_custo, margemPercentual);
 
     const quote = await prisma.quote.create({
       data: {
         tenantId: req.tenantId,
-        nome_cliente,
+        nome_cliente: normalizedClientName,
         data: new Date(data),
-        tipo_venda,
-        valor_custo,
-        margem_percentual: margemPercentual,
+        notes: typeof notes === 'string' ? notes : null,
+        sale_channel: normalizedSaleChannel,
+        subtotal_custo: Number.isFinite(Number(subtotal_custo)) ? Number(subtotal_custo) : subtotalCalculado,
+        margem_percentual: normalizedMargin,
         valor_total,
         items: {
           create: quoteItems,
         },
       },
-      include: { items: { include: { product: true, printer: true } } },
+      include: { items: { include: { product: true } } },
     });
 
-    res.json(buildQuoteResponse(quote, normalizedSettings));
+    res.json(quote);
   } catch (error: any) {
-    res.status(400).json({ error: error?.message || 'Erro ao criar orçamento.' });
+    console.error('Failed to create quote', error);
+    res.status(500).json({ error: error?.message || 'Nao foi possivel salvar a cotacao.' });
   }
 });
 
-router.put('/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { nome_cliente, data, items, tipo_venda } = req.body;
-    const settings = await prisma.globalSettings.findUnique({ where: { tenantId: req.tenantId } });
-    const normalizedSettings = normalizeQuoteSettings(settings || mockData.tenant1.settings);
-
-    if (!String(nome_cliente || '').trim()) {
-      throw new Error('Nome do cliente é obrigatório.');
-    }
-
-    if (!data) {
-      throw new Error('Data do orçamento é obrigatória.');
-    }
-
-    const margemPercentual = resolveSaleTypeMargin(String(tipo_venda || ''), normalizedSettings);
-
-    const existingQuote = await prisma.quote.findFirst({
-      where: { id, tenantId: req.tenantId },
-    });
-
-    if (!existingQuote) {
-      return res.status(404).json({ error: 'Orçamento não encontrado.' });
-    }
-
-    const quoteItems = await buildQuoteItems(items, req.tenantId, settings?.custo_kwh ?? 0);
-    const valor_custo = quoteItems.reduce((sum, item) => sum + item.quantidade * item.preco_unitario, 0);
-    const valor_total = applyMargin(valor_custo, margemPercentual);
-
-    const quote = await prisma.quote.update({
-      where: { id },
-      data: {
-        nome_cliente: String(nome_cliente).trim(),
-        data: new Date(data),
-        tipo_venda,
-        valor_custo,
-        margem_percentual: margemPercentual,
-        valor_total,
-        items: {
-          deleteMany: {},
-          create: quoteItems,
-        },
-      },
-      include: { items: { include: { product: true, printer: true } } },
-    });
-
-    res.json(buildQuoteResponse(quote, normalizedSettings));
-  } catch (error: any) {
-    res.status(400).json({ error: error?.message || 'Erro ao atualizar orçamento.' });
+router.post('/:id/share', async (req, res) => {
+  if (!req.authUser) {
+    return requireAuth(req, res, () => undefined);
   }
+
+  const { id } = req.params;
+  const existingQuote = await prisma.quote.findFirst({
+    where: { id, tenantId: req.tenantId },
+  });
+
+  if (!existingQuote) {
+    return res.status(404).json({ error: 'Cotacao nao encontrada para gerar link publico.' });
+  }
+
+  const publicShareToken = existingQuote.publicShareToken || createOpaqueToken();
+  const quote = existingQuote.publicShareToken
+    ? existingQuote
+    : await prisma.quote.update({
+        where: { id: existingQuote.id },
+        data: {
+          publicShareToken,
+          publicSharedAt: new Date(),
+        },
+      });
+
+  res.json({
+    quoteId: quote.id,
+    shareUrl: `${getFrontendBaseUrl(req)}/shared/quotes/${publicShareToken}`,
+  });
+});
+
+router.get('/:id', async (req, res) => {
+  if (!req.authUser) {
+    return requireAuth(req, res, () => undefined);
+  }
+
+  const { id } = req.params;
+  const quote = await prisma.quote.findFirst({
+    where: { id, tenantId: req.tenantId },
+    include: { items: { include: { product: true } } },
+  });
+
+  if (!quote) {
+    return res.status(404).json({ error: 'Cotacao nao encontrada.' });
+  }
+
+  res.json(quote);
+});
+
+router.get('/public/:token', async (req, res) => {
+  const token = typeof req.params.token === 'string' ? req.params.token : '';
+
+  if (!token) {
+    return res.status(400).json({ error: 'Token publico da cotacao nao informado.' });
+  }
+
+  const quote = await prisma.quote.findFirst({
+    where: { publicShareToken: token },
+    include: { items: { include: { product: true } } },
+  });
+
+  if (!quote) {
+    return res.status(404).json({ error: 'Cotacao publica nao encontrada.' });
+  }
+
+  res.json(quote);
 });
 
 router.get('/:id/pdf', async (req, res) => {
-  const { id } = req.params;
-  const [quote, settings] = await Promise.all([
-    prisma.quote.findFirst({
-      where: { id, tenantId: req.tenantId },
-      include: { items: { include: { product: true, printer: true } } },
-    }),
-    prisma.globalSettings.findUnique({ where: { tenantId: req.tenantId } }),
-  ]);
-
-  if (!quote) {
-      return res.status(404).json({ error: 'Orçamento não encontrado' });
+  if (!req.authUser) {
+    return requireAuth(req, res, () => undefined);
   }
 
-  if (!quote.tipo_venda || !Number.isFinite(quote.margem_percentual)) {
-    return res.status(400).json({ error: 'Selecione uma modalidade de venda válida antes de exportar o orçamento em PDF.' });
+  const { id } = req.params;
+  const quote = await prisma.quote.findFirst({
+    where: { id, tenantId: req.tenantId },
+    include: { items: { include: { product: true } } },
+  });
+
+  if (!quote) {
+    return res.status(404).json({ error: 'Quote not found' });
   }
 
   const doc = new PDFDocument({ size: 'A4', margin: 40 });
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="quote-${quote.id}.pdf"`);
 
-  const logoImage = parseLogoDataUrl(settings?.logo_data_url);
-
-  if (logoImage) {
-    try {
-      doc.image(logoImage.buffer, 40, 36, { fit: [120, 60], valign: 'center' });
-      doc.y = 108;
-    } catch {
-      doc.y = 40;
-    }
-  }
-
   doc.fontSize(18).fillColor('#111827').text('RiseLab3D', { underline: true });
   doc.moveDown(0.5);
   doc.fontSize(12).fillColor('#374151').text('Orçamento Profissional', { continued: true }).text(` • ${quote.nome_cliente}`, { align: 'right' });
   doc.moveDown();
   doc.fontSize(10).text(`Data: ${quote.data.toISOString().substring(0, 10)}`);
-
-  const saleTypeLabel = SALE_TYPE_LABELS[quote.tipo_venda] ?? quote.tipo_venda;
-  const saleTypeTop = doc.y + 6;
-  doc.roundedRect(40, saleTypeTop, 220, 32, 10).fill('#E0F2FE');
-  doc.fillColor('#0F172A').font('Helvetica-Bold').fontSize(11).text(`Modalidade: ${saleTypeLabel}`, 52, saleTypeTop + 10, { width: 196 });
-  doc.font('Helvetica').moveDown();
-  doc.y = saleTypeTop + 44;
-
-  doc.text(`Custo base: R$ ${quote.valor_custo.toFixed(2)}`);
+  doc.text(`Canal: ${SALE_CHANNEL_LABELS[quote.sale_channel] || quote.sale_channel}`);
+  doc.text(`Custo base: R$ ${quote.subtotal_custo.toFixed(2)}`);
+  doc.text(`Margem aplicada: ${quote.margem_percentual.toFixed(2)}%`);
   doc.text(`Total: R$ ${quote.valor_total.toFixed(2)}`);
+  if (quote.notes) {
+    doc.moveDown(0.5);
+    doc.text(`Observacoes: ${quote.notes}`);
+  }
   doc.moveDown(1);
 
   doc.fontSize(11).text('Itens', { underline: true });
@@ -302,14 +283,16 @@ router.get('/:id/pdf', async (req, res) => {
 
   quote.items.forEach((item, index) => {
     const y = tableTop + 20 + index * 20;
-    doc.text(item.product.sku, 40, y, { width: 200 });
+    doc.text(item.snapshot_sku || item.product?.sku || 'MANUAL', 40, y, { width: 200 });
     doc.text(String(item.quantidade), 260, y, { width: 50, align: 'right' });
     doc.text(`R$ ${item.preco_unitario.toFixed(2)}`, 330, y, { width: 80, align: 'right' });
-    doc.text(`R$ ${(item.preco_unitario * item.quantidade).toFixed(2)}`, 420, y, { width: 90, align: 'right' });
+    doc.text(`R$ ${(item.subtotal_preco ?? item.preco_unitario * item.quantidade).toFixed(2)}`, 420, y, { width: 90, align: 'right' });
   });
 
   doc.moveDown(quote.items.length + 2);
   doc.font('Helvetica-Bold').text(`Valor Total: R$ ${quote.valor_total.toFixed(2)}`, { align: 'right' });
+  doc.moveDown();
+  doc.font('Helvetica').fontSize(9).text('RiseLab3D - Plataforma de gestão de impressão 3D', { align: 'center' });
 
   doc.pipe(res);
   doc.end();

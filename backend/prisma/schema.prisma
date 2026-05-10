@@ -12,85 +12,116 @@ model Tenant {
   id      String    @id @default(uuid())
   name    String
   users   User[]
+  sessions AuthSession[]
+  verificationTokens EmailVerificationToken[]
+  clients Client[]
   printers Printer[]
   filaments Filament[]
   settings GlobalSettings?
   products Product[]
   quotes   Quote[]
-  feedbacks Feedback[]
+}
+
+model Client {
+  id        String   @id @default(uuid())
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  tenantId   String
+  name       String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
+
+  @@index([tenantId])
+  @@index([name])
+  @@unique([tenantId, name])
 }
 
 model User {
-  id        String @id @default(uuid())
-  tenant    Tenant @relation(fields: [tenantId], references: [id])
-  tenantId  String
-  name      String @default("")
-  email     String @unique
-  password  String
-  role      String @default("client")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  feedbacks Feedback[]
+  id              String   @id @default(uuid())
+  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+  tenantId        String
+  email           String   @unique
+  password        String   @default("")
+  name            String?
+  googleId        String?  @unique
+  emailVerifiedAt DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
+  sessions        AuthSession[]
+  verificationTokens EmailVerificationToken[]
 }
 
-model PrinterModel {
-  id        String    @id @default(uuid())
-  name      String    @unique
-  consumoWattsPadrao Float @default(120)
-  vidaUtilHorasPadrao Float @default(2000)
-  printers  Printer[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-}
-
-model ProductColor {
+model AuthSession {
   id        String   @id @default(uuid())
-  name      String   @unique
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  tenantId  String
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([tenantId])
+  @@index([expiresAt])
+}
+
+model EmailVerificationToken {
+  id        String   @id @default(uuid())
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  tenantId  String
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([tenantId])
+  @@index([expiresAt])
 }
 
 model Printer {
-  id             String   @id @default(uuid())
-  tenant         Tenant   @relation(fields: [tenantId], references: [id])
-  tenantId       String
-  nome           String
-  model          PrinterModel @relation(fields: [modelId], references: [id])
-  modelId        String
-  consumo_watts  Float
-  custo_aquisicao Float
-  vida_util_horas Float
-  data_desativacao DateTime?
-  products       Product[]
-  quoteItems     QuoteItem[]
-
-  @@index([tenantId, data_desativacao])
+  id                           String   @id @default(uuid())
+  tenant                       Tenant   @relation(fields: [tenantId], references: [id])
+  tenantId                     String
+  nome                         String
+  brand                        String   @default("")
+  model                        String   @default("")
+  technology                   String   @default("FDM")
+  averagePowerConsumptionWatts Float    @default(0)
+  peakPowerConsumptionWatts    Float    @default(0)
+  buildVolumeX                 Float    @default(0)
+  buildVolumeY                 Float    @default(0)
+  buildVolumeZ                 Float    @default(0)
+  averagePrintSpeed            Float    @default(0)
+  nozzleDiameter               Float    @default(0.4)
+  isCoreXY                     Boolean  @default(false)
+  isEnclosed                   Boolean  @default(false)
+  status                       String   @default("ACTIVE")
+  consumo_watts                Float
+  custo_aquisicao              Float
+  vida_util_horas              Float
+  products                     Product[]
 }
 
 model Filament {
-  id           String   @id @default(uuid())
-  tenant       Tenant   @relation(fields: [tenantId], references: [id])
-  tenantId     String
-  marca        String
-  lote         String
-  data_compra  DateTime
-  tipo         String
+  id          String   @id @default(uuid())
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  tenantId    String
+  marca       String
+  tipo        String
   custo_por_kg Float
-  data_desativacao DateTime?
-  products     Product[]
-
-  @@index([tenantId, data_desativacao])
+  products    Product[]
 }
 
 model GlobalSettings {
-  id                               String  @id @default(uuid())
-  tenant                           Tenant  @relation(fields: [tenantId], references: [id])
-  tenantId                         String  @unique
-  custo_kwh                        Float
-  margem_venda_direta              Float   @default(20)
-  margem_venda_ecommerce           Float   @default(35)
-  margem_venda_consumidor_final    Float   @default(50)
-  logo_data_url                    String?
+  id      String  @id @default(uuid())
+  tenant   Tenant  @relation(fields: [tenantId], references: [id])
+  tenantId String  @unique
+  custo_kwh Float
+  direct_margin_percent Float @default(20)
+  ecommerce_margin_percent Float @default(35)
+  end_customer_margin_percent Float @default(50)
 }
 
 model Product {
@@ -106,17 +137,14 @@ model Product {
   custo_material    Float
   custo_energia     Float
   custo_amortizacao Float
-  custo_adicional   Float       @default(0)
-  falha_percentual  Float       @default(10)
   custo_total       Float
-  printer           Printer?    @relation(fields: [printerId], references: [id])
-  printerId         String?
+  printer           Printer     @relation(fields: [printerId], references: [id])
+  printerId         String
   filament          Filament    @relation(fields: [filamentId], references: [id])
   filamentId        String
-  data_desativacao  DateTime?
   quoteItems        QuoteItem[]
 
-  @@index([tenantId, data_desativacao])
+  @@index([tenantId])
   @@index([sku])
 }
 
@@ -126,10 +154,15 @@ model Quote {
   tenantId     String
   nome_cliente String
   data         DateTime
-  tipo_venda   String
-  valor_custo  Float
-  margem_percentual Float
+  notes        String?
+  sale_channel String      @default("direct")
+  subtotal_custo Float     @default(0)
+  margem_percentual Float  @default(0)
   valor_total  Float
+  publicShareToken String? @unique
+  publicSharedAt DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @default(now()) @updatedAt
   items        QuoteItem[]
 
   @@index([tenantId])
@@ -140,25 +173,14 @@ model QuoteItem {
   id            String   @id @default(uuid())
   quote         Quote    @relation(fields: [quoteId], references: [id])
   quoteId       String
-  product       Product  @relation(fields: [productId], references: [id])
-  productId     String
-  printer       Printer? @relation(fields: [printerId], references: [id])
-  printerId     String?
+  product       Product? @relation(fields: [productId], references: [id])
+  productId     String?
   quantidade    Int
   preco_unitario Float
-}
-
-model Feedback {
-  id        String   @id @default(uuid())
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
-  tenantId  String
-  user      User?    @relation(fields: [userId], references: [id])
-  userId    String?
-  category  String
-  subject   String
-  message   String
-  status    String   @default("novo")
-  createdAt DateTime @default(now())
-
-  @@index([tenantId, createdAt])
+  snapshot_nome String?
+  snapshot_sku  String?
+  snapshot_material String?
+  custo_base_unitario Float?
+  subtotal_custo Float?
+  subtotal_preco Float?
 }
