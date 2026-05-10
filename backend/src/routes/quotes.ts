@@ -26,101 +26,110 @@ router.get('/', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { nome_cliente, data, items, notes, sale_channel, subtotal_custo, margem_percentual } = req.body;
+  try {
+    const { nome_cliente, data, items, notes, sale_channel, subtotal_custo, margem_percentual } = req.body;
 
-  const normalizedSaleChannel = typeof sale_channel === 'string' && sale_channel.trim() ? sale_channel : 'direct';
-  const normalizedMargin = Number.isFinite(Number(margem_percentual)) ? Number(margem_percentual) : 0;
-  const settings = await prisma.globalSettings.findUnique({ where: { tenantId: req.tenantId } });
+    if (!Array.isArray(items) || !items.length) {
+      return res.status(400).json({ error: 'Envie pelo menos um item para salvar a cotacao.' });
+    }
 
-  const quoteItems = await Promise.all(
-    items.map(async (item: any) => {
-      if (!item.productId) {
-        const printer = await prisma.printer.findFirst({ where: { id: item.printerId, tenantId: req.tenantId } });
-        const defaultFilament = await prisma.filament.findFirst({ where: { tenantId: req.tenantId } });
+    const normalizedSaleChannel = typeof sale_channel === 'string' && sale_channel.trim() ? sale_channel : 'direct';
+    const normalizedMargin = Number.isFinite(Number(margem_percentual)) ? Number(margem_percentual) : 0;
+    const settings = await prisma.globalSettings.findUnique({ where: { tenantId: req.tenantId } });
 
-        if (!printer) {
-          throw new Error('Printer not found: ' + item.printerId);
+    const quoteItems = await Promise.all(
+      items.map(async (item: any) => {
+        if (!item.productId) {
+          const printer = await prisma.printer.findFirst({ where: { id: item.printerId, tenantId: req.tenantId } });
+          const defaultFilament = await prisma.filament.findFirst({ where: { tenantId: req.tenantId } });
+
+          if (!printer) {
+            throw new Error('Impressora nao encontrada para a cotacao informada.');
+          }
+
+          if (!defaultFilament) {
+            throw new Error('Nenhum material padrao foi encontrado para calcular a cotacao.');
+          }
+
+          const quantidade = Number(item.quantidade);
+          const materialWeightGrams = Number(item.materialWeightGrams);
+          const printHours = Number(item.printHours);
+          const productName = typeof item.productName === 'string' && item.productName.trim() ? item.productName.trim() : 'Cotacao manual';
+          const costData = calculateProductCosts(
+            materialWeightGrams,
+            printHours,
+            printer,
+            defaultFilament,
+            settings?.custo_kwh ?? 0,
+            0,
+          );
+          const precoUnitario = Number(item.preco_unitario ?? costData.custoTotal);
+          const subtotalCusto = costData.custoTotal * quantidade;
+          const subtotalPreco = precoUnitario * quantidade;
+
+          return {
+            productId: null,
+            quantidade,
+            preco_unitario: precoUnitario,
+            snapshot_nome: productName,
+            snapshot_sku: `MANUAL-${productName}`,
+            snapshot_material: `${materialWeightGrams} g - ${printHours} h - ${defaultFilament.marca} ${defaultFilament.tipo}`,
+            custo_base_unitario: costData.custoTotal,
+            subtotal_custo: subtotalCusto,
+            subtotal_preco: subtotalPreco,
+          };
         }
 
-        if (!defaultFilament) {
-          throw new Error('Filament not found for tenant: ' + req.tenantId);
-        }
+        const product = await prisma.product.findFirst({
+          where: { id: item.productId, tenantId: req.tenantId },
+          include: { filament: true },
+        });
+        if (!product) throw new Error('Produto nao encontrado para a cotacao informada.');
 
         const quantidade = Number(item.quantidade);
-        const materialWeightGrams = Number(item.materialWeightGrams);
-        const printHours = Number(item.printHours);
-        const productName = typeof item.productName === 'string' && item.productName.trim() ? item.productName.trim() : 'Cotacao manual';
-        const costData = calculateProductCosts(
-          materialWeightGrams,
-          printHours,
-          printer,
-          defaultFilament,
-          settings?.custo_kwh ?? 0,
-          0,
-        );
-        const precoUnitario = Number(item.preco_unitario ?? costData.custoTotal);
-        const subtotalCusto = costData.custoTotal * quantidade;
+        const precoUnitario = Number(item.preco_unitario ?? product.custo_total);
+        const subtotalCusto = product.custo_total * quantidade;
         const subtotalPreco = precoUnitario * quantidade;
 
         return {
-          productId: null,
+          productId: item.productId,
           quantidade,
           preco_unitario: precoUnitario,
-          snapshot_nome: productName,
-          snapshot_sku: `MANUAL-${productName}`,
-          snapshot_material: `${materialWeightGrams} g • ${printHours} h • ${defaultFilament.marca} ${defaultFilament.tipo}`,
-          custo_base_unitario: costData.custoTotal,
+          snapshot_nome: product.nome,
+          snapshot_sku: product.sku,
+          snapshot_material: `${product.filament.marca} ${product.filament.tipo}`,
+          custo_base_unitario: product.custo_total,
           subtotal_custo: subtotalCusto,
           subtotal_preco: subtotalPreco,
         };
-      }
+      }),
+    );
 
-      const product = await prisma.product.findFirst({
-        where: { id: item.productId, tenantId: req.tenantId },
-        include: { filament: true },
-      });
-      if (!product) throw new Error('Product not found: ' + item.productId);
+    const subtotalCalculado = quoteItems.reduce((sum, item) => sum + (item.subtotal_custo || 0), 0);
+    const valor_total = quoteItems.reduce((sum, item) => sum + item.quantidade * item.preco_unitario, 0);
 
-      const quantidade = Number(item.quantidade);
-      const precoUnitario = Number(item.preco_unitario ?? product.custo_total);
-      const subtotalCusto = product.custo_total * quantidade;
-      const subtotalPreco = precoUnitario * quantidade;
-
-      return {
-        productId: item.productId,
-        quantidade,
-        preco_unitario: precoUnitario,
-        snapshot_nome: product.nome,
-        snapshot_sku: product.sku,
-        snapshot_material: `${product.filament.marca} ${product.filament.tipo}`,
-        custo_base_unitario: product.custo_total,
-        subtotal_custo: subtotalCusto,
-        subtotal_preco: subtotalPreco,
-      };
-    }),
-  );
-
-  const subtotalCalculado = quoteItems.reduce((sum, item) => sum + (item.subtotal_custo || 0), 0);
-  const valor_total = quoteItems.reduce((sum, item) => sum + item.quantidade * item.preco_unitario, 0);
-
-  const quote = await prisma.quote.create({
-    data: {
-      tenantId: req.tenantId,
-      nome_cliente,
-      data: new Date(data),
-      notes: typeof notes === 'string' ? notes : null,
-      sale_channel: normalizedSaleChannel,
-      subtotal_custo: Number.isFinite(Number(subtotal_custo)) ? Number(subtotal_custo) : subtotalCalculado,
-      margem_percentual: normalizedMargin,
-      valor_total,
-      items: {
-        create: quoteItems,
+    const quote = await prisma.quote.create({
+      data: {
+        tenantId: req.tenantId,
+        nome_cliente: typeof nome_cliente === 'string' && nome_cliente.trim() ? nome_cliente.trim() : 'Cliente nao informado',
+        data: new Date(data),
+        notes: typeof notes === 'string' ? notes : null,
+        sale_channel: normalizedSaleChannel,
+        subtotal_custo: Number.isFinite(Number(subtotal_custo)) ? Number(subtotal_custo) : subtotalCalculado,
+        margem_percentual: normalizedMargin,
+        valor_total,
+        items: {
+          create: quoteItems,
+        },
       },
-    },
-    include: { items: { include: { product: true } } },
-  });
+      include: { items: { include: { product: true } } },
+    });
 
-  res.json(quote);
+    res.json(quote);
+  } catch (error: any) {
+    console.error('Failed to create quote', error);
+    res.status(500).json({ error: error?.message || 'Nao foi possivel salvar a cotacao.' });
+  }
 });
 
 router.get('/:id/pdf', async (req, res) => {

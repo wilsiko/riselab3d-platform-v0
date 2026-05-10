@@ -57,7 +57,7 @@ function App() {
   }, [visualMode]);
 
   return (
-    <div className={`min-h-screen overflow-hidden ${visualMode === 'dark' ? 'bg-[#050816] text-slate-100 theme-dark' : 'bg-[#eef4fb] text-slate-900 theme-light'}`}>
+    <div className={`min-h-screen overflow-x-hidden ${visualMode === 'dark' ? 'bg-[#050816] text-slate-100 theme-dark' : 'bg-[#eef4fb] text-slate-900 theme-light'}`}>
       <div
         className={`pointer-events-none absolute inset-0 ${
           visualMode === 'dark'

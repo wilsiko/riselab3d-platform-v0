@@ -4,22 +4,30 @@ interface PrinterSelectorProps {
   printers: Printer[];
   selectedPrinterId: string;
   onChange: (printerId: string) => void;
+  error?: string;
+  required?: boolean;
 }
 
-export function PrinterSelector({ printers, selectedPrinterId, onChange }: PrinterSelectorProps) {
+export function PrinterSelector({ printers, selectedPrinterId, onChange, error, required = false }: PrinterSelectorProps) {
   const selectedPrinter = printers.find((printer) => printer.id === selectedPrinterId) || null;
 
   return (
-    <div className="rounded-[28px] border border-white/10 bg-[#0a1228]/78 p-5 shadow-[0_16px_50px_rgba(0,0,0,0.18)]">
+    <div className={`rounded-[28px] border bg-[#0a1228]/78 p-5 shadow-[0_16px_50px_rgba(0,0,0,0.18)] ${error ? 'border-red-400/60' : 'border-white/10'}`}>
       <div className="space-y-4">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Impressora</p>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+          Impressora
+          {required ? <span className="ml-1 text-red-300">*</span> : null}
+        </p>
 
         <label className="relative block min-w-0">
           <select
+            id="quote-printer"
             aria-label="Impressora"
             value={selectedPrinterId}
             onChange={(event) => onChange(event.target.value)}
-            className="min-h-[68px] w-full appearance-none rounded-[24px] border border-white/10 bg-white/[0.04] px-5 pr-14 text-base font-semibold text-white outline-none transition focus:border-cyan-400/40 focus:bg-cyan-400/[0.05]"
+            aria-invalid={error ? 'true' : 'false'}
+            aria-describedby={error ? 'quote-printer-error' : undefined}
+            className={`min-h-[68px] w-full appearance-none rounded-[24px] border bg-white/[0.04] px-5 pr-14 text-base font-semibold text-white outline-none transition focus:bg-cyan-400/[0.05] ${error ? 'border-red-400/60 focus:border-red-400/70' : 'border-white/10 focus:border-cyan-400/40'}`}
           >
             <option value="">Selecione uma impressora</option>
             {printers.map((printer) => (
@@ -41,6 +49,8 @@ export function PrinterSelector({ printers, selectedPrinterId, onChange }: Print
             {selectedPrinter ? `${selectedPrinter.consumo_watts} W` : '--'}
           </div>
         </div>
+
+        {error ? <p id="quote-printer-error" className="text-sm leading-5 text-red-300">{error}</p> : null}
       </div>
     </div>
   );
