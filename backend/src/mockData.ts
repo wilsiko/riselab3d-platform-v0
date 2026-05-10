@@ -4,26 +4,16 @@
  * Usado quando o banco não está disponível
  */
 
+import { printerCatalogSeeds } from './data/printerCatalog';
+
+const mockPrinters = printerCatalogSeeds.map((printer) => ({
+  ...printer,
+  tenantId: 'tenant_1',
+}));
+
 export const mockData = {
   tenant1: {
-    printers: [
-      {
-        id: 'printer_1',
-        tenantId: 'tenant_1',
-        nome: 'Ender 3 Pro',
-        consumo_watts: 120,
-        custo_aquisicao: 1500,
-        vida_util_horas: 2000,
-      },
-      {
-        id: 'printer_2',
-        tenantId: 'tenant_1',
-        nome: 'Creality Ender 5',
-        consumo_watts: 150,
-        custo_aquisicao: 2000,
-        vida_util_horas: 2500,
-      },
-    ],
+    printers: mockPrinters,
     filaments: [
       {
         id: 'filament_1',
@@ -59,16 +49,9 @@ export const mockData = {
         custo_energia: 0.189,
         custo_amortizacao: 0.12,
         custo_total: 6.31,
-        printerId: 'printer_1',
+        printerId: 'printer_bambu_lab_a1_mini',
         filamentId: 'filament_1',
-        printer: {
-          id: 'printer_1',
-          tenantId: 'tenant_1',
-          nome: 'Ender 3 Pro',
-          consumo_watts: 120,
-          custo_aquisicao: 1500,
-          vida_util_horas: 2000,
-        },
+        printer: mockPrinters[0],
         filament: {
           id: 'filament_1',
           tenantId: 'tenant_1',
@@ -90,16 +73,9 @@ export const mockData = {
         custo_energia: 0.315,
         custo_amortizacao: 0.15,
         custo_total: 9.47,
-        printerId: 'printer_2',
+        printerId: 'printer_creality_k1',
         filamentId: 'filament_2',
-        printer: {
-          id: 'printer_2',
-          tenantId: 'tenant_1',
-          nome: 'Creality Ender 5',
-          consumo_watts: 150,
-          custo_aquisicao: 2000,
-          vida_util_horas: 2500,
-        },
+        printer: mockPrinters.find((printer) => printer.id === 'printer_creality_k1')!,
         filament: {
           id: 'filament_2',
           tenantId: 'tenant_1',

@@ -28,14 +28,27 @@ model User {
 }
 
 model Printer {
-  id             String   @id @default(uuid())
-  tenant         Tenant   @relation(fields: [tenantId], references: [id])
-  tenantId       String
-  nome           String
-  consumo_watts  Float
-  custo_aquisicao Float
-  vida_util_horas Float
-  products       Product[]
+  id                           String   @id @default(uuid())
+  tenant                       Tenant   @relation(fields: [tenantId], references: [id])
+  tenantId                     String
+  nome                         String
+  brand                        String   @default("")
+  model                        String   @default("")
+  technology                   String   @default("FDM")
+  averagePowerConsumptionWatts Float    @default(0)
+  peakPowerConsumptionWatts    Float    @default(0)
+  buildVolumeX                 Float    @default(0)
+  buildVolumeY                 Float    @default(0)
+  buildVolumeZ                 Float    @default(0)
+  averagePrintSpeed            Float    @default(0)
+  nozzleDiameter               Float    @default(0.4)
+  isCoreXY                     Boolean  @default(false)
+  isEnclosed                   Boolean  @default(false)
+  status                       String   @default("ACTIVE")
+  consumo_watts                Float
+  custo_aquisicao              Float
+  vida_util_horas              Float
+  products                     Product[]
 }
 
 model Filament {

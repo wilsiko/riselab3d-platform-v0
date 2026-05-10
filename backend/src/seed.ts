@@ -1,4 +1,5 @@
 import { prisma } from './prisma';
+import { printerCatalogSeeds } from './data/printerCatalog';
 
 async function main() {
   const tenantId = 'tenant_1';
@@ -15,24 +16,38 @@ async function main() {
     create: { email: 'admin@riselab3d.com', password: 'changeme', tenantId: tenant.id },
   });
 
-  const printer = await prisma.printer.upsert({
-    where: { id: 'printer_1' },
-    update: {
-      nome: 'Ender 3 Pro',
-      consumo_watts: 120,
-      custo_aquisicao: 1500,
-      vida_util_horas: 2000,
+  await prisma.quoteItem.deleteMany({ where: { quote: { tenantId } } });
+  await prisma.quote.deleteMany({ where: { tenantId } });
+  await prisma.product.deleteMany({ where: { tenantId } });
+  await prisma.printer.deleteMany({ where: { tenantId } });
+  await prisma.filament.deleteMany({ where: { tenantId } });
+  await prisma.globalSettings.deleteMany({ where: { tenantId } });
+
+  await prisma.printer.createMany({
+    data: printerCatalogSeeds.map((printer) => ({
+      id: printer.id,
       tenantId,
-    },
-    create: {
-      id: 'printer_1',
-      tenantId,
-      nome: 'Ender 3 Pro',
-      consumo_watts: 120,
-      custo_aquisicao: 1500,
-      vida_util_horas: 2000,
-    },
+      nome: printer.nome,
+      brand: printer.brand,
+      model: printer.model,
+      technology: printer.technology,
+      averagePowerConsumptionWatts: printer.averagePowerConsumptionWatts,
+      peakPowerConsumptionWatts: printer.peakPowerConsumptionWatts,
+      buildVolumeX: printer.buildVolumeX,
+      buildVolumeY: printer.buildVolumeY,
+      buildVolumeZ: printer.buildVolumeZ,
+      averagePrintSpeed: printer.averagePrintSpeed,
+      nozzleDiameter: printer.nozzleDiameter,
+      isCoreXY: printer.isCoreXY,
+      isEnclosed: printer.isEnclosed,
+      status: printer.status,
+      consumo_watts: printer.consumo_watts,
+      custo_aquisicao: printer.custo_aquisicao,
+      vida_util_horas: printer.vida_util_horas,
+    })),
   });
+
+  const printer = await prisma.printer.findUniqueOrThrow({ where: { id: printerCatalogSeeds[0].id } });
 
   await prisma.filament.upsert({
     where: { id: 'filament_1' },
