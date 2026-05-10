@@ -76,6 +76,10 @@ function roundCurrency(value: number) {
   return Number(value.toFixed(2));
 }
 
+const sectionTitleClassName = 'text-[28px] font-semibold tracking-[-0.04em] text-white';
+const sectionDescriptionClassName = 'mt-2 text-sm leading-6 text-slate-400';
+const mainPanelClassName = 'rounded-[34px] border border-white/10 bg-white/[0.035] p-5 shadow-[0_24px_90px_rgba(0,0,0,0.24)] backdrop-blur-2xl sm:p-6 lg:min-h-[760px]';
+
 export default function Quotes() {
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [printers, setPrinters] = useState<Printer[]>([]);
@@ -148,6 +152,7 @@ export default function Quotes() {
   const productionCost = totalItemCost + additionalOperationalCost;
   const suggestedPrice = roundCurrency(productionCost * (1 + appliedMargin / 100));
   const netProfit = roundCurrency(suggestedPrice - productionCost);
+  const unitProductCost = totalQuantity ? roundCurrency(productionCost / totalQuantity) : 0;
   const averageUnitPrice = totalQuantity ? suggestedPrice / totalQuantity : 0;
   const recentQuotes = quotes.slice(0, 4);
   const canSubmit = Boolean(draft.productName.trim()) && Boolean(draft.clientName.trim()) && Boolean(draft.date) && Boolean(draft.printerId) && materialWeightGrams > 0 && printHours > 0 && quantity > 0 && suggestedPrice > 0 && Boolean(defaultMaterial);
@@ -233,11 +238,11 @@ export default function Quotes() {
       {success ? <Alert type="success" message={success} onClose={() => setSuccess(null)} /> : null}
 
       <form onSubmit={handleSubmit} className="space-y-8">
-        <div className="grid gap-6 xl:grid-cols-[1.15fr_0.92fr_1fr]">
-          <section className="rounded-[34px] border border-white/10 bg-white/[0.035] p-5 shadow-[0_24px_90px_rgba(0,0,0,0.24)] backdrop-blur-2xl sm:p-6">
+        <div className="grid gap-6 xl:grid-cols-3">
+          <section className={mainPanelClassName}>
             <div className="border-b border-white/10 pb-5">
-              <h2 className="text-xl font-semibold tracking-[-0.04em] text-white">Produto</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-400">Informe produto, cliente, peso, tempo e quantidade, depois selecione a impressora usada na producao.</p>
+              <h2 className={sectionTitleClassName}>Produto</h2>
+              <p className={sectionDescriptionClassName}>Informe produto, cliente, peso, tempo e quantidade, depois selecione a impressora usada na producao.</p>
             </div>
 
             <div className="mt-6 space-y-5">
@@ -268,7 +273,7 @@ export default function Quotes() {
               <div className="grid gap-4 xl:grid-cols-3">
                 <NumericInput label="Peso" value={draft.materialWeightGrams} onChange={(materialWeightGramsValue) => updateDraft({ materialWeightGrams: materialWeightGramsValue })} suffix="g" hint="material" />
                 <NumericInput label="Tempo" value={draft.printHours} onChange={(printHoursValue) => updateDraft({ printHours: printHoursValue })} suffix="h" hint="horas" />
-                <label className="flex min-h-[132px] flex-col rounded-[28px] border border-white/10 bg-[#0a1228]/85 p-4 shadow-[0_16px_50px_rgba(0,0,0,0.18)]">
+                <div className="relative flex min-h-[132px] flex-col rounded-[28px] border border-white/10 bg-[#0a1228]/85 p-4 shadow-[0_16px_50px_rgba(0,0,0,0.18)]">
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-1">
                       <span className="block text-sm font-medium leading-5 text-slate-200">Quantidade</span>
@@ -289,6 +294,7 @@ export default function Quotes() {
 
                   <div className="mt-4 flex min-h-[60px] items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 focus-within:border-cyan-400/40 focus-within:bg-cyan-400/[0.05]">
                     <input
+                      aria-label="Quantidade"
                       type="number"
                       inputMode="decimal"
                       step="1"
@@ -300,7 +306,9 @@ export default function Quotes() {
                   </div>
 
                   {showQuantityPresets ? (
-                    <div className="mt-3 flex flex-wrap gap-2">
+                    <div className="quantity-preset-popover absolute right-4 top-[calc(100%+12px)] z-20 w-[220px] rounded-[24px] p-3">
+                      <p className="quantity-preset-title px-1 text-[11px] font-semibold uppercase tracking-[0.2em]">Preset rapido</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
                       {[1, 5, 10, 25].map((presetQuantity) => (
                         <button
                           key={presetQuantity}
@@ -309,16 +317,17 @@ export default function Quotes() {
                             applyQuantityPreset(presetQuantity);
                             setShowQuantityPresets(false);
                           }}
-                          className={`rounded-full px-3 py-2 text-xs font-semibold transition ${
-                            totalQuantity === presetQuantity ? 'bg-cyan-400 text-slate-950' : 'border border-white/10 bg-white/[0.04] text-slate-200 hover:bg-white/[0.08]'
+                          className={`quantity-preset-option rounded-full border px-3 py-2 text-xs font-semibold transition ${
+                            totalQuantity === presetQuantity ? 'bg-cyan-400 text-slate-950' : ''
                           }`}
                         >
                           {presetQuantity} un
                         </button>
                       ))}
+                      </div>
                     </div>
                   ) : null}
-                </label>
+                </div>
               </div>
 
               {printers.length ? (
@@ -346,10 +355,10 @@ export default function Quotes() {
             </div>
           </section>
 
-          <section className="rounded-[34px] border border-white/10 bg-white/[0.035] p-5 shadow-[0_24px_90px_rgba(0,0,0,0.24)] backdrop-blur-2xl sm:p-6">
+          <section className={mainPanelClassName}>
             <div className="border-b border-white/10 pb-5">
-              <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-white">Custos adicionais e margem</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-400">Escolha o canal e ajuste apenas os custos que realmente variam.</p>
+              <h2 className={sectionTitleClassName}>Custos adicionais e margem</h2>
+              <p className={sectionDescriptionClassName}>Escolha o canal e ajuste apenas os custos que realmente variam.</p>
             </div>
 
             <div className="mt-6 grid gap-4 md:grid-cols-2">
@@ -394,20 +403,23 @@ export default function Quotes() {
             </div>
           </section>
 
-          <aside className="rounded-[34px] border border-cyan-400/15 bg-[linear-gradient(180deg,rgba(7,11,22,0.98),rgba(8,17,32,0.98))] p-5 shadow-[0_32px_100px_rgba(0,0,0,0.32)] backdrop-blur-2xl sm:p-6 xl:sticky xl:top-6 xl:h-fit">
+          <aside className="flex h-full flex-col rounded-[34px] border border-cyan-400/15 bg-[linear-gradient(180deg,rgba(7,11,22,0.98),rgba(8,17,32,0.98))] p-5 shadow-[0_32px_100px_rgba(0,0,0,0.32)] backdrop-blur-2xl sm:p-6 lg:min-h-[760px]">
             <div className="border-b border-white/10 pb-5">
-              <h2 className="mt-2 text-3xl font-semibold tracking-[-0.05em] text-white">Painel de preco ao vivo</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-400">Boa leitura para decisao rapida, mas agora com menos altura e menos ruido visual.</p>
+              <h2 className={sectionTitleClassName}>Painel de preco</h2>
+              <p className={sectionDescriptionClassName}>Boa leitura para decisao rapida, mas agora com menos altura e menos ruido visual.</p>
             </div>
 
             <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-2">
-              <PricingCard label="Custo total" value={productionCost} formatter={formatCurrency} description="Base tecnica + custos comerciais adicionados nesta proposta." />
-              <PricingCard label="Valor sugerido" value={suggestedPrice} formatter={formatCurrency} description="Preco final com margem aplicada." tone="accent" emphasize />
-              <PricingCard label="Lucro liquido" value={netProfit} formatter={formatCurrency} description="Resultado apos custo tecnico e operacao." tone="success" />
-              <PricingCard label="Valor por unidade" value={averageUnitPrice} formatter={formatCurrency} description="Media por unidade desta cotacao." tone="warm" />
+              <PricingCard label="Custo do produto (unidade)" value={unitProductCost} formatter={formatCurrency} description={"Formula: custo total / quantidade.\n\nConsidera a divisao do custo total da cotacao pela quantidade informada, incluindo custo tecnico, mao de obra e embalagem."} />
+              <PricingCard label="Valor de venda (unidade)" value={averageUnitPrice} formatter={formatCurrency} description={"Formula: valor venda total / quantidade.\n\nRepresenta o preco medio de venda de cada unidade depois da aplicacao da margem do canal escolhido."} tone="warm" />
+              <PricingCard label="Custo total" value={productionCost} formatter={formatCurrency} description={"Formula: custo tecnico total + mao de obra + embalagem.\n\nO custo tecnico total soma material, energia e amortizacao da impressora multiplicados pela quantidade."} />
+              <PricingCard label="Valor venda total" value={suggestedPrice} formatter={formatCurrency} description={"Formula: custo total x (1 + margem / 100).\n\nEste e o valor final sugerido para a cotacao completa com a margem comercial aplicada."} tone="accent" emphasize />
+              <div className="sm:col-span-2 xl:col-span-2">
+                <PricingCard label="Lucro liquido" value={netProfit} formatter={formatCurrency} description={"Formula: valor venda total - custo total.\n\nMostra quanto sobra na cotacao depois de cobrir o custo tecnico e os custos operacionais adicionais."} tone="success" />
+              </div>
             </div>
 
-            <div className="mt-6">
+            <div className="mt-auto pt-6">
               <button
                 type="submit"
                 disabled={!canSubmit}

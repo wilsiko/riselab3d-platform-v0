@@ -4,7 +4,7 @@ interface PricingCardProps {
   label: string;
   value: number;
   formatter: (value: number) => string;
-  description: string;
+  description?: string;
   tone?: 'default' | 'accent' | 'success' | 'warm';
   emphasize?: boolean;
 }
@@ -23,13 +23,29 @@ export function PricingCard({ label, value, formatter, description, tone = 'defa
         emphasize ? 'ring-1 ring-cyan-400/30' : ''
       }`}
     >
-      <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">{label}</p>
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">{label}</p>
+        {description ? (
+          <div className="group relative shrink-0">
+            <button
+              type="button"
+              aria-label={`Ajuda sobre ${label}`}
+              className="flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-xs font-semibold text-slate-300 transition hover:border-cyan-400/35 hover:bg-cyan-400/[0.08] hover:text-cyan-200 focus:border-cyan-400/35 focus:bg-cyan-400/[0.08] focus:text-cyan-200 focus:outline-none"
+            >
+              ?
+            </button>
+            <div className="pricing-help-popover pointer-events-none absolute right-0 top-[calc(100%+10px)] z-20 w-72 rounded-2xl p-4 text-left text-sm leading-6 opacity-0 transition duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+              <p className="pricing-help-title text-[11px] font-semibold uppercase tracking-[0.2em]">Como calculamos</p>
+              <p className="mt-2 whitespace-pre-line">{description}</p>
+            </div>
+          </div>
+        ) : null}
+      </div>
       <AnimatedNumber
         value={value}
         format={formatter}
         className={`mt-4 block text-3xl font-semibold tracking-[-0.04em] ${toneMap[tone]}`}
       />
-      <p className="mt-3 text-sm leading-6 text-slate-400">{description}</p>
     </article>
   );
 }
