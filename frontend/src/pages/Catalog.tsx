@@ -4,12 +4,11 @@ import api from '../api';
 import { Alert } from '../components/Alert';
 import { Loading } from '../components/Loading';
 import { SummaryWidget } from '../components/SummaryWidget';
-import { Filament, Printer, Product } from '../types';
+import { Printer, Product } from '../types';
 
 export default function Catalog() {
   const [products, setProducts] = useState<Product[]>([]);
   const [printers, setPrinters] = useState<Printer[]>([]);
-  const [filaments, setFilaments] = useState<Filament[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -17,14 +16,12 @@ export default function Catalog() {
     const loadCatalog = async () => {
       try {
         setIsLoading(true);
-        const [productsRes, printersRes, filamentsRes] = await Promise.all([
+        const [productsRes, printersRes] = await Promise.all([
           api.get<Product[]>('/products'),
           api.get<Printer[]>('/printers'),
-          api.get<Filament[]>('/filaments'),
         ]);
         setProducts(productsRes.data);
         setPrinters(printersRes.data);
-        setFilaments(filamentsRes.data);
       } catch (requestError: any) {
         setError(requestError?.response?.data?.error || 'Nao foi possivel carregar o catalogo.');
       } finally {
@@ -43,13 +40,13 @@ export default function Catalog() {
         <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-200">Arquitetura do catalogo</p>
         <h1 className="mt-4 text-4xl font-semibold tracking-[-0.05em] text-white">Cadastre uma vez. Reutilize com leitura premium em toda a jornada.</h1>
         <p className="mt-4 max-w-3xl text-base leading-7 text-slate-300">
-          O catalogo deixa de ser manutencao isolada e passa a operar como infraestrutura de cotacao. Produtos, materiais e impressoras abastecem a mesa comercial sem ruir a experiencia.
+          O catalogo deixa de ser manutencao isolada e passa a operar como infraestrutura de cotacao. Produtos e impressoras abastecem a mesa comercial sem ruir a experiencia.
         </p>
       </section>
 
       {error ? <Alert type="error" message={error} onClose={() => setError(null)} /> : null}
 
-      <section className="grid gap-6 xl:grid-cols-3">
+      <section className="grid gap-6 xl:grid-cols-2">
         {[
           {
             title: 'Produtos',
@@ -57,13 +54,6 @@ export default function Catalog() {
             description: 'Itens prontos para cotacao com custo base calculado e reuso rapido no wizard.',
             to: '/catalog/products',
             action: 'Abrir produtos',
-          },
-          {
-            title: 'Materiais',
-            count: filaments.length,
-            description: 'Perfis de material usados como referencia de custo e consistencia da operacao.',
-            to: '/catalog/materials',
-            action: 'Abrir materiais',
           },
           {
             title: 'Perfis de impressora',
@@ -77,7 +67,7 @@ export default function Catalog() {
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">{card.title}</p>
             <p className="mt-4 text-4xl font-semibold tracking-[-0.05em] text-white">{card.count}</p>
             <p className="mt-4 text-sm leading-6 text-slate-400">{card.description}</p>
-            <Link to={card.to} className="mt-6 inline-flex rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300">
+            <Link to={card.to} className="brand-primary-action mt-6 inline-flex rounded-2xl px-4 py-3 text-sm font-semibold transition">
               {card.action}
             </Link>
           </article>
@@ -91,13 +81,13 @@ export default function Catalog() {
             {[
               {
                 step: '1',
-                title: 'Defina perfis base',
-                description: 'Comece pelos materiais e impressoras que servem como padrao operacional.',
+                title: 'Defina as impressoras base',
+                description: 'Comece pelas impressoras que servem como padrao operacional de energia e amortizacao.',
               },
               {
                 step: '2',
                 title: 'Crie produtos reutilizaveis',
-                description: 'Transforme itens recorrentes em atalhos de cotacao para reduzir digitacao repetida.',
+                description: 'Transforme itens recorrentes em atalhos de cotacao usando peso e preco do material informado.',
               },
               {
                 step: '3',
@@ -106,7 +96,7 @@ export default function Catalog() {
               },
             ].map((item) => (
               <div key={item.step} className="rounded-[28px] border border-white/10 bg-[#0a1228]/78 p-5">
-                <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-cyan-400 text-sm font-semibold text-slate-950">
+                <div className="brand-primary-active inline-flex h-10 w-10 items-center justify-center rounded-full border text-sm font-semibold">
                   {item.step}
                 </div>
                 <h3 className="mt-4 text-lg font-semibold text-white">{item.title}</h3>
@@ -123,7 +113,7 @@ export default function Catalog() {
               Produtos com custo base pronto evitam preenchimento manual de preco em toda cotacao nova.
             </div>
             <div className="rounded-2xl bg-white/[0.06] px-4 py-3">
-              Materiais e impressoras nao precisam estar perfeitos para comecar, mas precisam existir para o sistema gerar referencia confiavel.
+              As impressoras precisam estar confiaveis para o sistema gerar energia e amortizacao coerentes.
             </div>
             <div className="rounded-2xl bg-white/[0.06] px-4 py-3">
               Quando o catalogo estiver estavel, o time comercial praticamente vive dentro do modulo de cotacoes.
@@ -132,9 +122,8 @@ export default function Catalog() {
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-3">
+      <section className="grid gap-4 md:grid-cols-2">
         <SummaryWidget label="Produtos" value={String(products.length)} description="SKU prontos para virarem cotacao com um clique." />
-        <SummaryWidget label="Materiais" value={String(filaments.length)} description="Perfis de material padronizados para custo confiavel." />
         <SummaryWidget label="Impressoras" value={String(printers.length)} description="Capacidade tecnica descrita fora do fluxo comercial." />
       </section>
     </div>

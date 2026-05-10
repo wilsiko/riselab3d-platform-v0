@@ -122,6 +122,7 @@ model GlobalSettings {
   direct_margin_percent Float @default(20)
   ecommerce_margin_percent Float @default(35)
   end_customer_margin_percent Float @default(50)
+  error_rate_percent Float @default(10)
 }
 
 model Product {

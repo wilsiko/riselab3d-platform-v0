@@ -1,4 +1,4 @@
-import { Printer, Filament, Product } from '@prisma/client';
+import { Printer, Filament } from '@prisma/client';
 
 export interface ValidationError {
   field: string;
@@ -57,24 +57,10 @@ export function calculateProductCosts(
     custoMaterial,
     custoEnergia,
     custoAmortizacao,
-    custoAdicional: additionalCost,
-    falhaPercentual,
     custoFalhas,
+    falhaPercentual,
     custoTotal,
   };
-}
-
-export function calculateQuoteItemUnitPrice(
-  product: Pick<Product, 'custo_material' | 'custo_adicional' | 'falha_percentual' | 'tempo_impressao_horas'>,
-  printer: Pick<Printer, 'consumo_watts' | 'custo_aquisicao' | 'vida_util_horas'>,
-  custoKwh: number,
-) {
-  const custoEnergia = (printer.consumo_watts / 1000) * product.tempo_impressao_horas * custoKwh;
-  const custoAmortizacao = (printer.custo_aquisicao / printer.vida_util_horas) * product.tempo_impressao_horas;
-  const subtotal = product.custo_material + custoEnergia + custoAmortizacao + product.custo_adicional;
-  const custoFalhas = subtotal * (product.falha_percentual / 100);
-
-  return subtotal + custoFalhas;
 }
 
 export interface QuotePricingSettings {

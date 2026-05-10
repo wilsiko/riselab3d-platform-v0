@@ -7,22 +7,25 @@ const defaultSettings: Settings = {
   direct_margin_percent: 20,
   ecommerce_margin_percent: 35,
   end_customer_margin_percent: 50,
+  error_rate_percent: 10,
 };
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings>(defaultSettings);
   const [value, setValue] = useState(settings.custo_kwh);
+  const [errorRate, setErrorRate] = useState(settings.error_rate_percent);
 
   useEffect(() => {
     api.get<Settings>('/settings').then((res) => {
       setSettings(res.data);
       setValue(res.data.custo_kwh);
+      setErrorRate(res.data.error_rate_percent);
     });
   }, []);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const response = await api.put<Settings>('/settings', { ...settings, custo_kwh: value });
+    const response = await api.put<Settings>('/settings', { ...settings, custo_kwh: value, error_rate_percent: errorRate });
     setSettings(response.data);
   };
 
@@ -42,6 +45,16 @@ export default function SettingsPage() {
             className="w-full rounded-2xl border-slate-200 bg-white p-3"
           />
         </label>
+        <label className="mt-4 block space-y-2 text-sm text-slate-700">
+          Taxa de erro (%)
+          <input
+            type="number"
+            step="0.01"
+            value={errorRate}
+            onChange={(e) => setErrorRate(Number(e.target.value))}
+            className="w-full rounded-2xl border-slate-200 bg-white p-3"
+          />
+        </label>
         <button type="submit" className="mt-4 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700">
           Salvar configurações
         </button>
@@ -50,6 +63,8 @@ export default function SettingsPage() {
       <div className="mt-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <p className="text-sm text-slate-600">Custo atual de kWh:</p>
         <p className="mt-2 text-2xl font-semibold text-slate-900">R$ {settings.custo_kwh.toFixed(2)}</p>
+        <p className="mt-4 text-sm text-slate-600">Taxa de erro atual:</p>
+        <p className="mt-2 text-2xl font-semibold text-slate-900">{settings.error_rate_percent.toFixed(2)}%</p>
       </div>
     </div>
   );

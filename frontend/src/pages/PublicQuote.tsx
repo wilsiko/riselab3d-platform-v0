@@ -130,7 +130,7 @@ export default function PublicQuote() {
           <p className="public-quote-copy mt-8 text-base leading-8">Esta e uma visualizacao publica da cotacao compartilhada. Para editar parametros, recalcular ou salvar uma nova versao, acesse sua conta na plataforma.</p>
 
           <div className="mt-8 flex flex-wrap gap-3">
-            <Link to="/login" className="inline-flex rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300">
+            <Link to="/login" className="brand-primary-action inline-flex rounded-2xl px-5 py-3 text-sm font-semibold transition">
               Entrar para editar
             </Link>
             <Link to="/quotes" className="public-quote-secondary-action inline-flex rounded-2xl border px-5 py-3 text-sm font-semibold transition">

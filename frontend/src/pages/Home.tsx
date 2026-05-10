@@ -11,7 +11,6 @@ interface DashboardStats {
   productsCount: number;
   quotesCount: number;
   printersCount: number;
-  filamentsCount: number;
 }
 
 function formatCurrency(value: number) {
@@ -99,7 +98,7 @@ export default function Home() {
   const { isAuthenticated } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [quotes, setQuotes] = useState<Quote[]>([]);
-  const [settings, setSettings] = useState<Settings>({ custo_kwh: 0, direct_margin_percent: 20, ecommerce_margin_percent: 35, end_customer_margin_percent: 50 });
+  const [settings, setSettings] = useState<Settings>({ custo_kwh: 0, direct_margin_percent: 20, ecommerce_margin_percent: 35, end_customer_margin_percent: 50, error_rate_percent: 10 });
   const [quoteSearch, setQuoteSearch] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -202,7 +201,7 @@ export default function Home() {
 
             <Link
               to="/quotes"
-              className="inline-flex items-center justify-center rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 shadow-[0_18px_40px_rgba(34,211,238,0.22)] transition hover:bg-cyan-300"
+              className="brand-primary-action inline-flex items-center justify-center rounded-2xl px-5 py-3 text-sm font-semibold transition"
             >
               Nova cotacao
             </Link>
@@ -221,7 +220,7 @@ export default function Home() {
             <div className="rounded-[28px] border border-dashed border-cyan-400/25 bg-cyan-400/[0.06] p-8 text-sm leading-7 text-slate-300">
               O modo visitante deixa a simulacao aberta, mas o historico de cotações fica reservado para contas autenticadas.
               <div className="mt-4">
-                <Link to="/login" className="inline-flex rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300">
+                <Link to="/login" className="brand-primary-action inline-flex rounded-2xl px-4 py-3 text-sm font-semibold transition">
                   Entrar para ver historico
                 </Link>
               </div>

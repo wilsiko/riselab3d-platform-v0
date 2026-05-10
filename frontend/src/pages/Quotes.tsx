@@ -45,6 +45,17 @@ interface ManualQuoteMetadata {
   filamentCostPerKg?: number;
   printHours?: number;
   quantity?: number;
+  errorRatePercent?: number;
+  technicalBaseCostPerUnit?: number;
+  failureCostPerUnit?: number;
+}
+
+interface QuotePrimarySummary {
+  productName: string;
+  unitCost: number | null;
+  errorRatePercent: number | null;
+  technicalBaseCostPerUnit: number | null;
+  failureCostPerUnit: number | null;
 }
 
 function getCurrentQuoteDate() {
@@ -272,18 +283,61 @@ function buildDraftFromQuote(quote: Quote): QuoteDraft | null {
   };
 }
 
-function getQuotePrimarySummary(quote: Quote) {
+function getQuotePrimarySummary(quote: Quote): QuotePrimarySummary {
   const primaryItem = quote.items[0];
+  const metadata = extractManualQuoteMetadata(quote.notes);
   const productName = primaryItem?.snapshot_nome || primaryItem?.product?.nome || 'Item sem titulo';
   const totalQuantity = quote.items.reduce((sum, item) => sum + item.quantidade, 0);
   const unitCost = primaryItem?.custo_base_unitario
     ?? (typeof primaryItem?.subtotal_custo === 'number' && primaryItem.quantidade > 0 ? primaryItem.subtotal_custo / primaryItem.quantidade : null)
     ?? (typeof quote.subtotal_custo === 'number' && totalQuantity > 0 ? quote.subtotal_custo / totalQuantity : null);
+  const product = primaryItem?.product;
+  const derivedTechnicalBaseCostPerUnit = product
+    ? product.custo_material + product.custo_energia + product.custo_amortizacao
+    : null;
+  const derivedFailureCostPerUnit = product && derivedTechnicalBaseCostPerUnit !== null
+    ? Math.max(product.custo_total - derivedTechnicalBaseCostPerUnit, 0)
+    : null;
+  const derivedErrorRatePercent = derivedTechnicalBaseCostPerUnit && derivedTechnicalBaseCostPerUnit > 0 && derivedFailureCostPerUnit !== null
+    ? (derivedFailureCostPerUnit / derivedTechnicalBaseCostPerUnit) * 100
+    : null;
 
   return {
     productName,
     unitCost,
+    errorRatePercent: metadata?.errorRatePercent ?? derivedErrorRatePercent ?? null,
+    technicalBaseCostPerUnit: metadata?.technicalBaseCostPerUnit ?? derivedTechnicalBaseCostPerUnit ?? null,
+    failureCostPerUnit: metadata?.failureCostPerUnit ?? derivedFailureCostPerUnit ?? null,
   };
+}
+
+function QuoteErrorRateSummary({ summary }: { summary: QuotePrimarySummary }) {
+  if (
+    summary.errorRatePercent === null
+    || summary.technicalBaseCostPerUnit === null
+    || summary.failureCostPerUnit === null
+  ) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-[22px] border border-amber-300/15 bg-amber-300/[0.06] p-3">
+      <div className="grid gap-3 text-sm sm:grid-cols-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-200/70">Taxa de erro</p>
+          <p className="mt-2 font-semibold text-white">{summary.errorRatePercent.toFixed(2)}%</p>
+        </div>
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-200/70">Impacto por unidade</p>
+          <p className="mt-2 font-semibold text-white">{formatCurrency(roundCurrency(summary.failureCostPerUnit))}</p>
+        </div>
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-200/70">Base tecnica antes da taxa</p>
+          <p className="mt-2 font-semibold text-white">{formatCurrency(roundCurrency(summary.technicalBaseCostPerUnit))}</p>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 const sectionTitleClassName = 'text-[28px] font-semibold tracking-[-0.04em] text-white';
@@ -298,7 +352,7 @@ export default function Quotes() {
   const [clients, setClients] = useState<Client[]>([]);
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [printers, setPrinters] = useState<Printer[]>([]);
-  const [settings, setSettings] = useState<Settings>({ custo_kwh: 0, direct_margin_percent: 20, ecommerce_margin_percent: 35, end_customer_margin_percent: 50 });
+  const [settings, setSettings] = useState<Settings>({ custo_kwh: 0, direct_margin_percent: 20, ecommerce_margin_percent: 35, end_customer_margin_percent: 50, error_rate_percent: 10 });
   const [draft, setDraft] = useState<QuoteDraft>(() => loadDraft());
   const [isLoading, setIsLoading] = useState(false);
   const [showQuantityPresets, setShowQuantityPresets] = useState(false);
@@ -489,6 +543,8 @@ export default function Quotes() {
   const amortizationCostPerUnit = selectedPrinter && printHours > 0
     ? (selectedPrinter.custo_aquisicao / selectedPrinter.vida_util_horas) * printHours
     : 0;
+  const technicalBaseCostPerUnit = materialCostPerUnit + energyCostPerUnit + amortizationCostPerUnit;
+  const failureCostPerUnit = technicalBaseCostPerUnit * (settings.error_rate_percent / 100);
 
   const unitTechnicalCost = useMemo(() => {
     if (!selectedPrinter || materialWeightGrams <= 0 || filamentCostPerKg <= 0 || printHours <= 0) {
@@ -498,8 +554,9 @@ export default function Quotes() {
     const materialCost = (materialWeightGrams / 1000) * filamentCostPerKg;
     const energyCost = (selectedPrinter.consumo_watts / 1000) * printHours * settings.custo_kwh;
     const amortizationCost = (selectedPrinter.custo_aquisicao / selectedPrinter.vida_util_horas) * printHours;
-    return materialCost + energyCost + amortizationCost;
-  }, [filamentCostPerKg, materialWeightGrams, printHours, selectedPrinter, settings.custo_kwh]);
+    const technicalBaseCost = materialCost + energyCost + amortizationCost;
+    return technicalBaseCost + technicalBaseCost * (settings.error_rate_percent / 100);
+  }, [filamentCostPerKg, materialWeightGrams, printHours, selectedPrinter, settings.custo_kwh, settings.error_rate_percent]);
 
   const totalItemCost = unitTechnicalCost * quantity;
   const totalPrintHours = printHours * quantity;
@@ -543,12 +600,13 @@ export default function Quotes() {
                 <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Entradas da simulacao</p>
                 <div className="mt-4 space-y-3 text-sm text-slate-300">
                   <div className="flex items-center justify-between gap-4"><span>Peso informado</span><strong className="text-white">{materialWeightGrams > 0 ? `${materialWeightGrams.toFixed(2)} g` : '--'}</strong></div>
-                  <div className="flex items-center justify-between gap-4"><span>Preco do filamento</span><strong className="text-white">{filamentCostPerKg > 0 ? `${formatCurrency(filamentCostPerKg)}/kg` : '--'}</strong></div>
+                  <div className="flex items-center justify-between gap-4"><span>Preco do material</span><strong className="text-white">{filamentCostPerKg > 0 ? `${formatCurrency(filamentCostPerKg)}/kg` : '--'}</strong></div>
                   <div className="flex items-center justify-between gap-4"><span>Tempo de impressao</span><strong className="text-white">{draft.printHours || '--'}</strong></div>
                   <div className="flex items-center justify-between gap-4"><span>Quantidade</span><strong className="text-white">{totalQuantity}</strong></div>
                   <div className="flex items-center justify-between gap-4"><span>Impressora</span><strong className="text-right text-white">{selectedPrinter?.nome || '--'}</strong></div>
                   <div className="flex items-center justify-between gap-4"><span>Consumo eletrico</span><strong className="text-white">{selectedPrinter ? `${selectedPrinter.consumo_watts} W` : '--'}</strong></div>
                   <div className="flex items-center justify-between gap-4"><span>Custo da energia</span><strong className="text-white">{formatCurrency(settings.custo_kwh)}/kWh</strong></div>
+                  <div className="flex items-center justify-between gap-4"><span>Taxa de erro</span><strong className="text-white">{settings.error_rate_percent.toFixed(2)}%</strong></div>
                   <div className="flex items-center justify-between gap-4"><span>Custo de aquisicao</span><strong className="text-white">{selectedPrinter ? formatCurrency(selectedPrinter.custo_aquisicao) : '--'}</strong></div>
                   <div className="flex items-center justify-between gap-4"><span>Vida util da impressora</span><strong className="text-white">{selectedPrinter ? `${selectedPrinter.vida_util_horas} h` : '--'}</strong></div>
                 </div>
@@ -568,6 +626,10 @@ export default function Quotes() {
                   <div>
                     <p className="text-slate-400">Amortizacao da impressora</p>
                     <p className="mt-1 text-white">({selectedPrinter ? `${formatCurrency(selectedPrinter.custo_aquisicao)} / ${selectedPrinter.vida_util_horas} h` : '--'}) x {printHours.toFixed(4)} h = {formatCurrency(roundCurrency(amortizationCostPerUnit))}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-400">Taxa de erro aplicada</p>
+                    <p className="mt-1 text-white">({formatCurrency(roundCurrency(technicalBaseCostPerUnit))}) x {settings.error_rate_percent.toFixed(2)}% = {formatCurrency(roundCurrency(failureCostPerUnit))}</p>
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-[#0a1228]/78 p-3">
                     <div className="flex items-center justify-between gap-4"><span>Custo tecnico por unidade</span><strong className="text-cyan-200">{formatCurrency(roundCurrency(unitTechnicalCost))}</strong></div>
@@ -672,7 +734,7 @@ export default function Quotes() {
                 type="button"
                 onClick={handleCreateClient}
                 disabled={!clientSearch.trim() || hasExactClientMatch || isSavingClient}
-                className="rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                className="brand-primary-action rounded-2xl px-4 py-3 text-sm font-semibold transition disabled:cursor-not-allowed"
               >
                 {hasExactClientMatch ? 'Cliente ja cadastrado' : isSavingClient ? 'Salvando...' : 'Cadastrar cliente'}
               </button>
@@ -753,7 +815,7 @@ export default function Quotes() {
     }
 
     if (!draft.filamentCostPerKg.trim() || filamentCostPerKg <= 0) {
-      nextFieldErrors.filamentCostPerKg = 'Informe um preco por kg maior que zero para o filamento.';
+      nextFieldErrors.filamentCostPerKg = 'Informe um preco por kg maior que zero para o material.';
     }
 
     if (!draft.printHours.trim()) {
@@ -883,6 +945,9 @@ export default function Quotes() {
       filamentCostPerKg,
       printHours,
       quantity,
+      errorRatePercent: settings.error_rate_percent,
+      technicalBaseCostPerUnit: roundCurrency(technicalBaseCostPerUnit),
+      failureCostPerUnit: roundCurrency(failureCostPerUnit),
     };
 
     const contextNotes = [
@@ -1059,7 +1124,7 @@ export default function Quotes() {
 
               <div className="grid gap-4 xl:grid-cols-2">
                 <NumericInput id="quote-weight" label="Peso" value={draft.materialWeightGrams} onChange={(materialWeightGramsValue) => updateDraft({ materialWeightGrams: materialWeightGramsValue })} suffix="g" hint="material" required error={fieldErrors.materialWeightGrams} />
-                <NumericInput id="quote-filament-cost" label="Preco do filamento" value={draft.filamentCostPerKg} onChange={(filamentCostPerKgValue) => updateDraft({ filamentCostPerKg: filamentCostPerKgValue })} prefix="R$" hint="kg" required error={fieldErrors.filamentCostPerKg} />
+                <NumericInput id="quote-filament-cost" label="Preco do material" value={draft.filamentCostPerKg} onChange={(filamentCostPerKgValue) => updateDraft({ filamentCostPerKg: filamentCostPerKgValue })} prefix="R$" hint="kg" required error={fieldErrors.filamentCostPerKg} />
               </div>
 
               <div className="grid gap-4 xl:grid-cols-2">
@@ -1151,7 +1216,7 @@ export default function Quotes() {
                             setShowQuantityPresets(false);
                           }}
                           className={`quantity-preset-option rounded-full border px-3 py-2 text-xs font-semibold transition ${
-                            totalQuantity === presetQuantity ? 'bg-cyan-400 text-slate-950' : ''
+                            totalQuantity === presetQuantity ? 'brand-primary-active' : ''
                           }`}
                         >
                           {presetQuantity} un
@@ -1264,9 +1329,22 @@ export default function Quotes() {
                     <p className="mt-1 font-medium text-cyan-100">{formatCurrency(persistedQuote.valor_total)}</p>
                   </div>
                 </div>
+                {sharedQuoteSummary ? <div className="mt-4"><QuoteErrorRateSummary summary={sharedQuoteSummary} /></div> : null}
                 <p className="mt-4 text-sm leading-6 text-slate-300">Voce pode ajustar esta base e salvar novamente. O salvamento cria uma nova cotacao, sem sobrescrever o registro anterior.</p>
               </div>
             ) : null}
+
+            <div className="mt-6">
+              <QuoteErrorRateSummary
+                summary={{
+                  productName: draft.productName,
+                  unitCost: unitProductCost,
+                  errorRatePercent: settings.error_rate_percent,
+                  technicalBaseCostPerUnit,
+                  failureCostPerUnit,
+                }}
+              />
+            </div>
 
             <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-2">
               <PricingCard
@@ -1341,7 +1419,7 @@ export default function Quotes() {
               <button
                 type="submit"
                 disabled={isSubmitDisabled}
-                className="w-full rounded-2xl bg-cyan-400 px-5 py-4 text-sm font-semibold text-slate-950 shadow-[0_18px_40px_rgba(34,211,238,0.22)] transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                className="brand-primary-action w-full rounded-2xl px-5 py-4 text-sm font-semibold transition disabled:cursor-not-allowed"
               >
                 Salvar cotacao
               </button>
@@ -1363,19 +1441,23 @@ export default function Quotes() {
               <div className="rounded-[30px] border border-dashed border-cyan-400/25 bg-cyan-400/[0.06] p-6 text-sm leading-7 text-slate-300 xl:col-span-4">
                 O historico salvo fica vinculado ao tenant da conta autenticada.
                 <div className="mt-4">
-                  <Link to="/login" className="inline-flex rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300">
+                  <Link to="/login" className="brand-primary-action inline-flex rounded-2xl px-4 py-3 text-sm font-semibold transition">
                     Entrar para liberar historico
                   </Link>
                 </div>
               </div>
             ) : recentQuotes.length ? (
               recentQuotes.map((quote) => {
-                const { productName, unitCost } = getQuotePrimarySummary(quote);
+                const summary = getQuotePrimarySummary(quote);
+                const { productName, unitCost } = summary;
 
                 return (
                   <Link key={quote.id} to={`/quotes?quote=${quote.id}`} className="block rounded-[30px] border border-white/10 bg-[#0a1228]/78 p-5 shadow-[0_18px_60px_rgba(0,0,0,0.2)] transition hover:border-cyan-400/35 hover:bg-cyan-400/[0.08]">
                     <h3 className="mt-3 text-lg font-semibold text-white">{productName}</h3>
                     <p className="mt-2 text-xl font-semibold tracking-[-0.03em] text-cyan-200">{unitCost !== null ? formatCurrency(unitCost) : 'Custo unitario nao informado'}</p>
+                    <div className="mt-4">
+                      <QuoteErrorRateSummary summary={summary} />
+                    </div>
                     <div className="mt-3 flex flex-wrap gap-2">{renderChannelPriceBadges(unitCost, saleChannels)}</div>
                     <div className="mt-4 space-y-1 text-sm text-slate-400">
                       <p>{quote.nome_cliente}</p>
@@ -1423,7 +1505,7 @@ export default function Quotes() {
                 <button
                   type="submit"
                   disabled={isSubmitDisabled}
-                  className="rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                  className="brand-primary-action rounded-2xl px-4 py-3 text-sm font-semibold disabled:cursor-not-allowed"
                 >
                   Salvar
                 </button>

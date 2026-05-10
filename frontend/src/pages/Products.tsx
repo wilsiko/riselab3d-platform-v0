@@ -5,7 +5,7 @@ import { Loading } from '../components/Loading';
 import { NumericInput } from '../components/NumericInput';
 import { Pagination } from '../components/Pagination';
 import { SummaryWidget } from '../components/SummaryWidget';
-import { Filament, Printer, Product } from '../types';
+import { Printer, Product } from '../types';
 import { parseLocaleNumber } from '../utils/number';
 
 const ITEMS_PER_PAGE = 6;
@@ -17,7 +17,7 @@ interface ProductForm {
   peso_gramas: number;
   tempo_impressao_horas: number;
   printerId: string;
-  filamentId: string;
+  filament_cost_per_kg: number;
   additional_cost: number;
 }
 
@@ -27,7 +27,6 @@ function formatCurrency(value: number) {
 
 export default function Products() {
   const [printers, setPrinters] = useState<Printer[]>([]);
-  const [filaments, setFilaments] = useState<Filament[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [form, setForm] = useState<ProductForm>({
@@ -37,7 +36,7 @@ export default function Products() {
     peso_gramas: 50,
     tempo_impressao_horas: 1,
     printerId: '',
-    filamentId: '',
+    filament_cost_per_kg: 120,
     additional_cost: 0,
   });
   const [result, setResult] = useState<Product | null>(null);
@@ -52,13 +51,11 @@ export default function Products() {
     const loadData = async () => {
       try {
         setIsLoading(true);
-        const [printersRes, filamentsRes, productsRes] = await Promise.all([
+        const [printersRes, productsRes] = await Promise.all([
           api.get<Printer[]>('/printers'),
-          api.get<Filament[]>('/filaments'),
           api.get<Product[]>('/products'),
         ]);
         setPrinters(printersRes.data);
-        setFilaments(filamentsRes.data);
         setProducts(productsRes.data);
       } catch (requestError: any) {
         setError(requestError?.response?.data?.error || 'Erro ao carregar dados do catalogo de produtos.');
@@ -98,7 +95,7 @@ export default function Products() {
         <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-200">Design de SKU</p>
         <h1 className="mt-4 text-4xl font-semibold tracking-[-0.05em] text-white">Produtos com contexto tecnico claro e custo pronto para cotacao.</h1>
         <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-300">
-          Esta tela deixa de ser um formulario frio e vira um atelier de SKU. Cada item nasce com material, impressora e custo base prontos para o espaco comercial.
+          Esta tela deixa de ser um formulario frio e vira um atelier de SKU. Cada item nasce com peso, preco do material informado e impressora prontos para o espaco comercial.
         </p>
       </section>
 
@@ -107,7 +104,7 @@ export default function Products() {
 
       <section className="grid gap-4 md:grid-cols-3">
         <SummaryWidget label="Produtos ativos" value={String(products.length)} description="SKUs prontos para entrar na cotacao sem digitacao manual." />
-        <SummaryWidget label="Perfis tecnicos" value={String(printers.length + filaments.length)} description="Soma de impressoras e materiais disponiveis para combinacao." />
+        <SummaryWidget label="Perfis tecnicos" value={String(printers.length)} description="Impressoras disponiveis para sustentar custo, energia e amortizacao." />
         <SummaryWidget label="Ultimo custo" value={result ? formatCurrency(result.custo_total) : 'Aguardando'} description="Resultado mais recente criado nesta sessao." />
       </section>
 
@@ -134,6 +131,7 @@ export default function Products() {
           </label>
 
           <NumericInput label="Peso" value={String(form.peso_gramas)} onChange={(value) => setForm({ ...form, peso_gramas: parseLocaleNumber(value) })} suffix="g" hint="massa" />
+          <NumericInput label="Preco do material" value={String(form.filament_cost_per_kg)} onChange={(value) => setForm({ ...form, filament_cost_per_kg: parseLocaleNumber(value) })} prefix="R$" hint="kg" />
           <NumericInput label="Tempo de impressao" value={String(form.tempo_impressao_horas)} onChange={(value) => setForm({ ...form, tempo_impressao_horas: parseLocaleNumber(value) })} suffix="h" hint="job" />
           <NumericInput label="Custos adicionais" value={String(form.additional_cost)} onChange={(value) => setForm({ ...form, additional_cost: parseLocaleNumber(value) })} prefix="R$" hint="extra" />
 
@@ -148,21 +146,9 @@ export default function Products() {
               ))}
             </select>
           </label>
-
-          <label className="block rounded-[28px] border border-white/10 bg-[#0a1228]/78 p-4">
-            <span className="mb-2 block text-sm font-medium text-slate-200">Material</span>
-            <select value={form.filamentId} onChange={(event) => setForm({ ...form, filamentId: event.target.value })} className="w-full rounded-2xl border border-white/10 bg-[#081120] p-3 text-white" required>
-              <option value="">Selecione</option>
-              {filaments.map((filament) => (
-                <option key={filament.id} value={filament.id}>
-                  {filament.marca} / {filament.tipo}
-                </option>
-              ))}
-            </select>
-          </label>
         </div>
 
-        <button type="submit" className="mt-6 rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300">
+        <button type="submit" className="brand-primary-action mt-6 rounded-2xl px-5 py-3 text-sm font-semibold transition">
           Criar produto e SKU
         </button>
       </form>
@@ -209,8 +195,8 @@ export default function Products() {
                   <p className="mt-2 text-sm font-semibold text-white">{product.printer.nome}</p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Material</p>
-                  <p className="mt-2 text-sm font-semibold text-white">{product.filament.marca}</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Material informado</p>
+                  <p className="mt-2 text-sm font-semibold text-white">{formatCurrency((product.custo_material / product.peso_gramas) * 1000)}/kg</p>
                 </div>
               </div>
             </article>

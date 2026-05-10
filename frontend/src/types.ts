@@ -18,6 +18,7 @@ export interface Settings {
   direct_margin_percent: number;
   ecommerce_margin_percent: number;
   end_customer_margin_percent: number;
+  error_rate_percent: number;
 }
 
 export interface Client {
@@ -35,6 +36,9 @@ export interface Product {
   sku: string;
   peso_gramas: number;
   tempo_impressao_horas: number;
+  custo_material: number;
+  custo_energia: number;
+  custo_amortizacao: number;
   custo_total: number;
   printer: Printer;
   filament: Filament;

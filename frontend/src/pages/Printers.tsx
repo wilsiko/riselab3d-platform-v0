@@ -87,7 +87,7 @@ export default function Printers() {
           <NumericInput label="Vida util" value={String(form.vida_util_horas)} onChange={(value) => setForm({ ...form, vida_util_horas: parseLocaleNumber(value) })} suffix="h" hint="uso" />
         </div>
 
-        <button type="submit" className="mt-6 rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300">
+        <button type="submit" className="brand-primary-action mt-6 rounded-2xl px-5 py-3 text-sm font-semibold transition">
           Adicionar impressora
         </button>
       </form>

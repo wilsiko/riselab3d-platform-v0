@@ -5,7 +5,6 @@ interface DashboardStats {
   productsCount: number;
   quotesCount: number;
   printersCount: number;
-  filamentsCount: number;
 }
 
 export default function Dashboard() {
@@ -19,10 +18,10 @@ export default function Dashboard() {
     <div>
       <h1 className="text-3xl font-semibold text-slate-900">Dashboard</h1>
       <p className="mt-2 text-slate-600">Resumo da operação e principais métricas.</p>
-      <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {['Produtos', 'Cotacoes', 'Impressoras', 'Filamentos'].map((label, index) => {
+      <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {['Produtos', 'Cotacoes', 'Impressoras'].map((label, index) => {
           const value = stats
-            ? [stats.productsCount, stats.quotesCount, stats.printersCount, stats.filamentsCount][index]
+            ? [stats.productsCount, stats.quotesCount, stats.printersCount][index]
             : '...';
           return (
             <div key={label} className="rounded-3xl border border-slate-200 bg-slate-50 p-6 shadow-sm">

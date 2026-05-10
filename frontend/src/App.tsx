@@ -3,7 +3,6 @@ import { Link, NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
 import Home from './pages/Home';
 import Printers from './pages/Printers';
-import Filaments from './pages/Filaments';
 import Products from './pages/Products';
 import Quotes from './pages/Quotes';
 import Catalog from './pages/Catalog';
@@ -104,7 +103,7 @@ function App() {
                     className={({ isActive }) =>
                       `rounded-2xl px-4 py-2.5 text-sm font-medium transition ${
                         isActive
-                          ? 'bg-cyan-400 text-slate-950 shadow-[0_12px_30px_rgba(34,211,238,0.28)]'
+                          ? 'brand-primary-active'
                           : 'text-slate-300 hover:bg-white/8 hover:text-white'
                       }`
                     }
@@ -147,7 +146,7 @@ function App() {
                       <p className="font-semibold text-white">Modo visitante</p>
                       <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Cotacao livre sem historico</p>
                     </div>
-                    <Link to="/login" className="rounded-xl bg-cyan-400 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-cyan-300">
+                    <Link to="/login" className="brand-primary-action rounded-xl px-3 py-2 text-xs font-semibold transition">
                       Entrar
                     </Link>
                   </div>
@@ -206,12 +205,11 @@ function App() {
               <Route path="/shared/quotes/:token" element={<PublicQuote />} />
               <Route path="/catalog" element={<Catalog />} />
               <Route path="/catalog/products" element={<Products />} />
-              <Route path="/catalog/materials" element={<Filaments />} />
               <Route path="/catalog/printers" element={<Printers />} />
               <Route path="/pricing" element={<PricingSetup />} />
               <Route path="/dashboard" element={<Navigate to="/" replace />} />
               <Route path="/products" element={<Navigate to="/catalog/products" replace />} />
-              <Route path="/filaments" element={<Navigate to="/catalog/materials" replace />} />
+              <Route path="/filaments" element={<Navigate to="/catalog/products" replace />} />
               <Route path="/printers" element={<Navigate to="/catalog/printers" replace />} />
             </Routes>
           </div>

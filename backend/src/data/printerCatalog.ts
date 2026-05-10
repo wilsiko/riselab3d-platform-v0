@@ -19,7 +19,7 @@ export interface PrinterCatalogSeed {
   vida_util_horas: number;
 }
 
-const DEFAULT_USEFUL_LIFE_HOURS = 4000;
+const DEFAULT_USEFUL_LIFE_HOURS = 20000;
 
 export const printerCatalogSeeds: PrinterCatalogSeed[] = [
   {

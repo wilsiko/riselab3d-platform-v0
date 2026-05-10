@@ -37,6 +37,7 @@ export const mockData = {
       direct_margin_percent: 20,
       ecommerce_margin_percent: 35,
       end_customer_margin_percent: 50,
+      error_rate_percent: 10,
     },
     products: [
       {

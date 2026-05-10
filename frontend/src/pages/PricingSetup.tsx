@@ -14,6 +14,7 @@ const defaultSettings: Settings = {
   direct_margin_percent: 20,
   ecommerce_margin_percent: 35,
   end_customer_margin_percent: 50,
+  error_rate_percent: 10,
 };
 
 interface PrinterDraft {
@@ -34,6 +35,7 @@ function mapSettingsToForm(settings: Settings) {
     direct_margin_percent: String(settings.direct_margin_percent),
     ecommerce_margin_percent: String(settings.ecommerce_margin_percent),
     end_customer_margin_percent: String(settings.end_customer_margin_percent),
+    error_rate_percent: String(settings.error_rate_percent),
   };
 }
 
@@ -52,7 +54,7 @@ function createEmptyPrinterDraft(): PrinterDraft {
     nome: '',
     consumo_watts: '120',
     custo_aquisicao: '1500',
-    vida_util_horas: '2000',
+    vida_util_horas: '20000',
   };
 }
 
@@ -143,10 +145,11 @@ export default function PricingSetup() {
       direct_margin_percent: parseLocaleNumber(settingsForm.direct_margin_percent),
       ecommerce_margin_percent: parseLocaleNumber(settingsForm.ecommerce_margin_percent),
       end_customer_margin_percent: parseLocaleNumber(settingsForm.end_customer_margin_percent),
+      error_rate_percent: parseLocaleNumber(settingsForm.error_rate_percent),
     };
 
     if (Object.values(payloadSettings).some((value) => !Number.isFinite(value) || value < 0)) {
-      setError('Revise energia e margens dos canais antes de salvar.');
+      setError('Revise energia, margens dos canais e taxa de erro antes de salvar.');
       return;
     }
 
@@ -260,6 +263,10 @@ export default function PricingSetup() {
 
             <div className="mt-6">
               <NumericInput label="Custo do kWh" value={settingsForm.custo_kwh} onChange={(value) => updateSettingsForm('custo_kwh', value)} prefix="R$" hint="energia" />
+            </div>
+
+            <div className="mt-4">
+              <NumericInput label="Taxa de erro" value={settingsForm.error_rate_percent} onChange={(value) => updateSettingsForm('error_rate_percent', value)} suffix="%" hint="falhas" />
             </div>
 
             <div className="mt-6 space-y-4">
@@ -378,7 +385,7 @@ export default function PricingSetup() {
         </section>
 
         <div className="flex justify-end">
-          <button type="submit" className="rounded-2xl bg-cyan-400 px-6 py-4 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400" disabled={isLoading}>
+          <button type="submit" className="brand-primary-action rounded-2xl px-6 py-4 text-sm font-semibold transition disabled:cursor-not-allowed" disabled={isLoading}>
             Salvar configuracoes
           </button>
         </div>

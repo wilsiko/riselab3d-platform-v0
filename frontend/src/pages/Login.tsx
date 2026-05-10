@@ -112,7 +112,7 @@ export default function Login() {
               <div className="rounded-[28px] border border-white/10 bg-[linear-gradient(135deg,rgba(34,211,238,0.12),rgba(255,255,255,0.04))] p-5">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-200">Sem compromisso inicial</p>
                 <div className="mt-4 flex flex-wrap gap-3 text-sm">
-                  <Link to="/quotes" className="rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 font-semibold text-white transition hover:bg-white/[0.1]">
+                  <Link to="/quotes" className="brand-primary-action rounded-2xl px-4 py-3 font-semibold transition">
                     Continuar como visitante
                   </Link>
                 </div>
@@ -134,10 +134,10 @@ export default function Login() {
           </div>
 
           <div className="grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-white/[0.04] p-1.5">
-            <button type="button" onClick={() => setMode('login')} className={`rounded-2xl px-4 py-3 text-sm font-semibold transition ${mode === 'login' ? 'bg-cyan-400 text-slate-950' : 'text-slate-300 hover:bg-white/[0.08] hover:text-white'}`}>
+            <button type="button" onClick={() => setMode('login')} className={`rounded-2xl px-4 py-3 text-sm font-semibold transition ${mode === 'login' ? 'brand-primary-active' : 'text-slate-300 hover:bg-white/[0.08] hover:text-white'}`}>
               Entrar
             </button>
-            <button type="button" onClick={() => setMode('register')} className={`rounded-2xl px-4 py-3 text-sm font-semibold transition ${mode === 'register' ? 'bg-cyan-400 text-slate-950' : 'text-slate-300 hover:bg-white/[0.08] hover:text-white'}`}>
+            <button type="button" onClick={() => setMode('register')} className={`rounded-2xl px-4 py-3 text-sm font-semibold transition ${mode === 'register' ? 'brand-primary-active' : 'text-slate-300 hover:bg-white/[0.08] hover:text-white'}`}>
               Criar conta
             </button>
           </div>
@@ -165,7 +165,7 @@ export default function Login() {
               <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-2xl border border-white/10 bg-[#0a1228]/90 p-3 text-white outline-none focus:border-cyan-400/40" placeholder="Minimo de 8 caracteres" />
             </label>
 
-            <button type="submit" disabled={isSubmitting || isLoading} className="w-full rounded-2xl bg-cyan-400 px-5 py-4 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400">
+            <button type="submit" disabled={isSubmitting || isLoading} className="brand-primary-action w-full rounded-2xl px-5 py-4 text-sm font-semibold transition disabled:cursor-not-allowed">
               {mode === 'login' ? 'Entrar' : 'Criar conta'}
             </button>
           </form>

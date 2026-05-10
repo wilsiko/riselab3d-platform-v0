@@ -12,17 +12,12 @@ const quickSteps = [
       'Comece em Impressoras para registrar os equipamentos da operação, consumo, vida útil e custo de aquisição.',
   },
   {
-    title: '2. Cadastre seus filamentos',
+    title: '2. Monte seus produtos',
     description:
-      'Em Filamentos, informe marca, tipo, lote e custo por quilo para o sistema calcular a base real da produção.',
+      'Na tela Produtos, combine peso, tempo de impressão, preço do material informado e demais custos para gerar o SKU e os custos associados.',
   },
   {
-    title: '3. Monte seus produtos',
-    description:
-      'Na tela Produtos, combine peso, tempo de impressão, filamento e demais custos para gerar o SKU e custos associados.',
-  },
-  {
-    title: '4. Gere seus orçamentos',
+    title: '3. Gere seus orçamentos',
     description:
       'Com os cadastros prontos, vá em Orçamentos para selecionar produtos, definir o tipo de venda e gerar o orçamento que pode ser exportado em PDF final.',
   },
@@ -53,7 +48,7 @@ export default function WelcomeGuideModal({ userName, onClose }: WelcomeGuideMod
 
         <div className="border-t border-slate-200 px-8 py-6">
           <div className="rounded-3xl bg-amber-50 px-5 py-4 text-sm leading-6 text-amber-900">
-            Dica: se quiser um fluxo ideal, cadastre primeiro impressoras e filamentos, depois produtos, e só então comece a montar os orçamentos.
+            Dica: se quiser um fluxo ideal, cadastre primeiro as impressoras, depois os produtos com peso e preco do material informado, e so entao comece a montar os orcamentos.
           </div>
 
           <div className="mt-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">

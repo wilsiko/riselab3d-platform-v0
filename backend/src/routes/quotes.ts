@@ -77,6 +77,7 @@ router.post('/', async (req, res) => {
             filamentForQuote,
             settings?.custo_kwh ?? 0,
             0,
+            settings?.error_rate_percent ?? 10,
           );
           const precoUnitario = Number(item.preco_unitario ?? costData.custoTotal);
           const subtotalCusto = costData.custoTotal * quantidade;
