@@ -101,7 +101,26 @@ function getDefaultDraft(): QuoteDraft {
 }
 
 function loadDraft(): QuoteDraft {
-  return getDefaultDraft();
+  if (typeof window === 'undefined') {
+    return getDefaultDraft();
+  }
+
+  const rawDraft = window.localStorage.getItem(QUOTE_DRAFT_STORAGE_KEY);
+
+  if (!rawDraft) {
+    return getDefaultDraft();
+  }
+
+  try {
+    const parsedDraft = JSON.parse(rawDraft) as Partial<QuoteDraft>;
+    return {
+      ...getDefaultDraft(),
+      ...parsedDraft,
+    };
+  } catch {
+    window.localStorage.removeItem(QUOTE_DRAFT_STORAGE_KEY);
+    return getDefaultDraft();
+  }
 }
 
 function formatCurrency(value: number) {
@@ -409,7 +428,32 @@ export default function Quotes() {
       return;
     }
 
-    window.localStorage.removeItem(QUOTE_DRAFT_STORAGE_KEY);
+    const hasMeaningfulDraft = Object.entries(draft).some(([key, value]) => {
+      if (key === 'date') {
+        return value !== getCurrentQuoteDate();
+      }
+
+      if (key === 'saleChannel') {
+        return value !== 'direct';
+      }
+
+      if (key === 'quantity') {
+        return value !== '1';
+      }
+
+      if (key === 'laborCost' || key === 'packagingCost') {
+        return value !== '0';
+      }
+
+      return value.trim() !== '';
+    });
+
+    if (!hasMeaningfulDraft) {
+      window.localStorage.removeItem(QUOTE_DRAFT_STORAGE_KEY);
+      return;
+    }
+
+    window.localStorage.setItem(QUOTE_DRAFT_STORAGE_KEY, JSON.stringify(draft));
   }, [draft]);
 
   useEffect(() => {
@@ -901,6 +945,9 @@ export default function Quotes() {
     setPersistedQuote(null);
     setPersistedSignature(null);
     setPublicShareUrl(null);
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(QUOTE_DRAFT_STORAGE_KEY);
+    }
     navigate('/quotes', { replace: true });
   }
 
