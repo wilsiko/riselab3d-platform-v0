@@ -4,7 +4,6 @@ import api from '../api';
 import { Alert } from '../components/Alert';
 import { Loading } from '../components/Loading';
 import { NumericInput } from '../components/NumericInput';
-import { PercentageField } from '../components/PercentageField';
 import { PricingCard } from '../components/PricingCard';
 import { PrinterSelector } from '../components/PrinterSelector';
 import { getSaleChannel, SALE_CHANNELS, SaleChannel } from '../constants/pricing';
@@ -17,16 +16,12 @@ interface QuoteDraft {
   date: string;
   notes: string;
   saleChannel: SaleChannel;
-  customMarginEnabled: boolean;
-  customMargin: string;
   printerId: string;
   materialWeightGrams: string;
   printHours: string;
   quantity: string;
   laborCost: string;
   packagingCost: string;
-  energyAdjustment: string;
-  feesPercent: string;
 }
 
 function getDefaultDraft(): QuoteDraft {
@@ -35,16 +30,12 @@ function getDefaultDraft(): QuoteDraft {
     date: new Date().toISOString().substring(0, 10),
     notes: '',
     saleChannel: 'direct',
-    customMarginEnabled: false,
-    customMargin: '',
     printerId: '',
     materialWeightGrams: '',
     printHours: '',
     quantity: '1',
     laborCost: '0',
     packagingCost: '0',
-    energyAdjustment: '0',
-    feesPercent: '0',
   };
 }
 
@@ -134,12 +125,10 @@ export default function Quotes() {
   const materialWeightGrams = parseDecimal(draft.materialWeightGrams);
   const printHours = parseDecimal(draft.printHours);
   const quantity = Math.max(1, Math.round(parseDecimal(draft.quantity) || 1));
-  const appliedMargin = draft.customMarginEnabled ? parseDecimal(draft.customMargin) : selectedChannel.marginPercent;
-  const feesPercent = parseDecimal(draft.feesPercent);
+  const appliedMargin = selectedChannel.marginPercent;
   const laborCost = parseDecimal(draft.laborCost);
   const packagingCost = parseDecimal(draft.packagingCost);
-  const energyAdjustment = parseDecimal(draft.energyAdjustment);
-  const additionalOperationalCost = laborCost + packagingCost + energyAdjustment;
+  const additionalOperationalCost = laborCost + packagingCost;
 
   const unitTechnicalCost = useMemo(() => {
     if (!selectedPrinter || !defaultMaterial || materialWeightGrams <= 0 || printHours <= 0) {
@@ -156,10 +145,8 @@ export default function Quotes() {
   const totalPrintHours = printHours * quantity;
   const totalQuantity = quantity;
   const productionCost = totalItemCost + additionalOperationalCost;
-  const subtotalBeforeFees = productionCost * (1 + appliedMargin / 100);
-  const feeAmount = subtotalBeforeFees * (feesPercent / 100);
-  const suggestedPrice = roundCurrency(subtotalBeforeFees + feeAmount);
-  const netProfit = roundCurrency(suggestedPrice - productionCost - feeAmount);
+  const suggestedPrice = roundCurrency(productionCost * (1 + appliedMargin / 100));
+  const netProfit = roundCurrency(suggestedPrice - productionCost);
   const averageUnitPrice = totalQuantity ? suggestedPrice / totalQuantity : 0;
   const recentQuotes = quotes.slice(0, 4);
   const canSubmit = Boolean(draft.clientName.trim()) && Boolean(draft.date) && Boolean(draft.printerId) && materialWeightGrams > 0 && printHours > 0 && quantity > 0 && suggestedPrice > 0 && Boolean(defaultMaterial);
@@ -227,8 +214,7 @@ export default function Quotes() {
     }
 
     const marginMultiplier = 1 + appliedMargin / 100;
-    const feeMultiplier = 1 + feesPercent / 100;
-    const targetTotal = roundCurrency((totalItemCost + additionalOperationalCost) * marginMultiplier * feeMultiplier);
+    const targetTotal = roundCurrency((totalItemCost + additionalOperationalCost) * marginMultiplier);
     const unitPrice = Number((targetTotal / quantity).toFixed(4));
     const payloadItems = [
       {
@@ -249,7 +235,7 @@ export default function Quotes() {
 
     const contextNotes = [
       draft.notes.trim() || null,
-      `Contexto comercial: canal ${selectedChannel.label}; mao de obra ${formatCurrency(laborCost)}; embalagem ${formatCurrency(packagingCost)}; energia extra ${formatCurrency(energyAdjustment)}; taxas ${feesPercent.toFixed(1)}%.`,
+      `Contexto comercial: canal ${selectedChannel.label}; mao de obra ${formatCurrency(laborCost)}; embalagem ${formatCurrency(packagingCost)}.`,
       `__RL3D_MANUAL__${JSON.stringify(manualMetadata)}`,
     ]
       .filter(Boolean)
@@ -292,11 +278,17 @@ export default function Quotes() {
         <div className="grid gap-6 xl:grid-cols-[1.15fr_0.92fr_1fr]">
           <section className="rounded-[34px] border border-white/10 bg-white/[0.035] p-5 shadow-[0_24px_90px_rgba(0,0,0,0.24)] backdrop-blur-2xl sm:p-6">
             <div className="border-b border-white/10 pb-5">
-              <h2 className="text-xl font-semibold tracking-[-0.04em] text-white">Impressao</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-400">Selecione a impressora e informe apenas os dados basicos da impressao.</p>
+              <h2 className="text-xl font-semibold tracking-[-0.04em] text-white">Produto</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-400">Informe peso, tempo e quantidade, depois selecione a impressora usada na producao.</p>
             </div>
 
             <div className="mt-6 space-y-5">
+              <div className="grid gap-4 xl:grid-cols-3">
+                <NumericInput label="Peso" value={draft.materialWeightGrams} onChange={(materialWeightGramsValue) => updateDraft({ materialWeightGrams: materialWeightGramsValue })} suffix="g" hint="material" />
+                <NumericInput label="Tempo" value={draft.printHours} onChange={(printHoursValue) => updateDraft({ printHours: printHoursValue })} suffix="h" hint="horas" />
+                <NumericInput label="Quantidade" value={draft.quantity} onChange={(quantityValue) => updateDraft({ quantity: quantityValue })} hint="unid." />
+              </div>
+
               {printers.length ? (
                 <PrinterSelector printers={printers} selectedPrinterId={draft.printerId} onChange={(printerId) => updateDraft({ printerId })} />
               ) : (
@@ -319,91 +311,54 @@ export default function Quotes() {
                   </div>
                 </div>
               ) : null}
-
-              <div className="grid gap-4 xl:grid-cols-3">
-                <NumericInput label="Material em gramas" value={draft.materialWeightGrams} onChange={(materialWeightGramsValue) => updateDraft({ materialWeightGrams: materialWeightGramsValue })} suffix="g" hint="consumo" />
-                <NumericInput label="Tempo em horas" value={draft.printHours} onChange={(printHoursValue) => updateDraft({ printHours: printHoursValue })} suffix="h" hint="duracao" />
-                <NumericInput label="Quantidade" value={draft.quantity} onChange={(quantityValue) => updateDraft({ quantity: quantityValue })} hint="unidades" />
-              </div>
-
-              <p className="text-sm text-slate-400">
-                O material padrao configurado na base e usado apenas para calcular o custo tecnico automaticamente.
-              </p>
             </div>
           </section>
 
           <section className="rounded-[34px] border border-white/10 bg-white/[0.035] p-5 shadow-[0_24px_90px_rgba(0,0,0,0.24)] backdrop-blur-2xl sm:p-6">
             <div className="border-b border-white/10 pb-5">
-              <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-white">Custos do negocio</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-400">Adicione a camada comercial sem voltar para telas administrativas ou planilhas externas.</p>
-            </div>
-
-            <div className="mt-6 grid gap-3">
-              {SALE_CHANNELS.map((channel) => {
-                const isSelected = draft.saleChannel === channel.id;
-
-                return (
-                  <button
-                    key={channel.id}
-                    type="button"
-                    onClick={() => updateDraft({ saleChannel: channel.id })}
-                    className={`rounded-[28px] border p-5 text-left transition ${
-                      isSelected ? 'border-cyan-400/35 bg-cyan-400/[0.08]' : 'border-white/10 bg-[#0a1228]/75 hover:bg-white/[0.05]'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-4">
-                      <div>
-                        <p className="text-base font-semibold text-white">{channel.label}</p>
-                        <p className="mt-2 text-sm leading-6 text-slate-400">{channel.description}</p>
-                      </div>
-                      <div className="rounded-full bg-white/[0.08] px-4 py-2 text-sm font-semibold text-cyan-200">{channel.marginPercent}%</div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="mt-6 rounded-[30px] border border-white/10 bg-[#0a1228]/78 p-5">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-sm font-medium text-white">Margem aplicada</p>
-                  <p className="mt-1 text-sm text-slate-400">Use o preset ou destrave uma margem manual para casos especiais.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => updateDraft({ customMarginEnabled: !draft.customMarginEnabled })}
-                  className={`rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] transition ${
-                    draft.customMarginEnabled ? 'bg-cyan-400 text-slate-950' : 'bg-white/[0.08] text-slate-300'
-                  }`}
-                >
-                  {draft.customMarginEnabled ? 'Manual' : 'Preset'}
-                </button>
-              </div>
-
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Canal selecionado</p>
-                  <p className="mt-3 text-lg font-semibold text-white">{selectedChannel.label}</p>
-                  <p className="mt-2 text-sm text-slate-400">Preset padrao: {selectedChannel.marginPercent}%</p>
-                </div>
-
-                {draft.customMarginEnabled ? (
-                  <PercentageField label="Margem manual" value={draft.customMargin} onChange={(customMargin) => updateDraft({ customMargin })} hint="override" />
-                ) : (
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Margem em uso</p>
-                    <p className="mt-3 text-lg font-semibold text-cyan-200">{appliedMargin.toFixed(1)}%</p>
-                    <p className="mt-2 text-sm text-slate-400">Aplicada automaticamente a partir do canal.</p>
-                  </div>
-                )}
-              </div>
+              <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-white">Custos adicionais e margem</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-400">Escolha o canal e ajuste apenas os custos que realmente variam.</p>
             </div>
 
             <div className="mt-6 grid gap-4 md:grid-cols-2">
               <NumericInput label="Mao de obra" value={draft.laborCost} onChange={(laborCostValue) => updateDraft({ laborCost: laborCostValue })} prefix="R$" hint="fixo" />
               <NumericInput label="Embalagem" value={draft.packagingCost} onChange={(packagingCostValue) => updateDraft({ packagingCost: packagingCostValue })} prefix="R$" hint="fixo" />
-              <NumericInput label="Energia extra" value={draft.energyAdjustment} onChange={(energyAdjustmentValue) => updateDraft({ energyAdjustment: energyAdjustmentValue })} prefix="R$" hint="ajuste" />
-              <PercentageField label="Taxas comerciais" value={draft.feesPercent} onChange={(feesPercentValue) => updateDraft({ feesPercent: feesPercentValue })} hint="gateway" />
+            </div>
+
+            <div className="mt-6 rounded-[30px] border border-white/10 bg-[#0a1228]/78 p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-white">Canal de venda</p>
+                  <p className="mt-1 text-sm text-slate-400">Escolha o contexto comercial e consulte a explicacao so quando precisar.</p>
+                </div>
+                <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.08] px-4 py-3 text-right">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Margem atual</p>
+                  <p className="mt-1 text-lg font-semibold text-cyan-200">{selectedChannel.marginPercent}%</p>
+                </div>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {SALE_CHANNELS.map((channel) => {
+                  const isSelected = draft.saleChannel === channel.id;
+
+                  return (
+                    <div key={channel.id}>
+                      <button
+                        type="button"
+                        onClick={() => updateDraft({ saleChannel: channel.id })}
+                        className={`flex min-h-[60px] flex-1 items-center justify-between rounded-2xl border px-4 py-3 text-left transition ${
+                          isSelected ? 'border-cyan-400/35 bg-cyan-400/[0.08]' : 'border-white/10 bg-white/[0.04] hover:bg-white/[0.08]'
+                        }`}
+                      >
+                        <span className="text-sm font-semibold text-white">{channel.label}</span>
+                        <span className={`rounded-full px-3 py-1 text-sm font-semibold ${isSelected ? 'bg-cyan-300/20 text-cyan-200' : 'bg-white/[0.06] text-slate-300'}`}>
+                          {channel.marginPercent}%
+                        </span>
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             <div className="mt-6 rounded-[30px] border border-white/10 bg-[#0a1228]/78 p-5">
@@ -462,14 +417,14 @@ export default function Quotes() {
           <aside className="rounded-[34px] border border-cyan-400/15 bg-[linear-gradient(180deg,rgba(7,11,22,0.98),rgba(8,17,32,0.98))] p-5 shadow-[0_32px_100px_rgba(0,0,0,0.32)] backdrop-blur-2xl sm:p-6 xl:sticky xl:top-6 xl:h-fit">
             <div className="border-b border-white/10 pb-5">
               <h2 className="mt-2 text-3xl font-semibold tracking-[-0.05em] text-white">Painel de preco ao vivo</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-400">O painel dominante concentra custo, valor sugerido e resultado liquido em tempo real.</p>
+              <p className="mt-2 text-sm leading-6 text-slate-400">Boa leitura para decisao rapida, mas agora com menos altura e menos ruido visual.</p>
             </div>
 
-            <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
+            <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-2">
               <PricingCard label="Custo total" value={productionCost} formatter={formatCurrency} description="Base tecnica + custos comerciais adicionados nesta proposta." />
-              <PricingCard label="Valor sugerido" value={suggestedPrice} formatter={formatCurrency} description="Preco final com margem e taxas aplicadas." tone="accent" emphasize />
-              <PricingCard label="Lucro liquido" value={netProfit} formatter={formatCurrency} description="Leitura pos-custos e pos-taxas da cotacao atual." tone="success" />
-              <PricingCard label="Valor por unidade" value={averageUnitPrice} formatter={formatCurrency} description="Media por unidade considerando toda a cesta da cotacao." tone="warm" />
+              <PricingCard label="Valor sugerido" value={suggestedPrice} formatter={formatCurrency} description="Preco final com margem aplicada." tone="accent" emphasize />
+              <PricingCard label="Lucro liquido" value={netProfit} formatter={formatCurrency} description="Resultado apos custo tecnico e operacao." tone="success" />
+              <PricingCard label="Valor por unidade" value={averageUnitPrice} formatter={formatCurrency} description="Media por unidade desta cotacao." tone="warm" />
             </div>
 
             <div className="mt-6 rounded-[30px] border border-white/10 bg-white/[0.04] p-5">
@@ -513,10 +468,6 @@ export default function Quotes() {
                 <div className="flex items-center justify-between gap-4">
                   <span>Margem aplicada</span>
                   <span>{appliedMargin.toFixed(1)}%</span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span>Taxas</span>
-                  <span>{formatCurrency(feeAmount)}</span>
                 </div>
               </div>
             </div>
