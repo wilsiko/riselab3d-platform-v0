@@ -83,7 +83,7 @@ export default function Quotes() {
   const [settings, setSettings] = useState<Settings>({ custo_kwh: 0 });
   const [draft, setDraft] = useState<QuoteDraft>(() => loadDraft());
   const [isLoading, setIsLoading] = useState(false);
-  const [lastSavedQuoteId, setLastSavedQuoteId] = useState<string | null>(null);
+  const [showQuantityPresets, setShowQuantityPresets] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -160,51 +160,6 @@ export default function Quotes() {
     updateDraft({ quantity: String(nextQuantity) });
   }
 
-  function extractManualMetadata(notes?: string | null) {
-    const match = notes?.match(/__RL3D_MANUAL__(\{.*\})/);
-    if (!match) {
-      return null;
-    }
-
-    try {
-      return JSON.parse(match[1]) as {
-        printerId?: string;
-        materialWeightGrams?: number;
-        printHours?: number;
-        quantity?: number;
-      };
-    } catch {
-      return null;
-    }
-  }
-
-  function duplicateQuote(quote: Quote) {
-    const firstItem = quote.items[0];
-    const manualMetadata = extractManualMetadata(quote.notes);
-    const firstItemProduct = firstItem?.product;
-
-    setDraft({
-      ...getDefaultDraft(),
-      productName: firstItem?.snapshot_nome || '',
-      clientName: quote.nome_cliente,
-      saleChannel: (quote.sale_channel as SaleChannel) || 'direct',
-      printerId: manualMetadata?.printerId || firstItemProduct?.printer.id || '',
-      materialWeightGrams: manualMetadata?.materialWeightGrams ? String(manualMetadata.materialWeightGrams) : firstItemProduct?.peso_gramas ? String(firstItemProduct.peso_gramas) : '',
-      printHours: manualMetadata?.printHours ? String(manualMetadata.printHours) : firstItemProduct?.tempo_impressao_horas ? String(firstItemProduct.tempo_impressao_horas) : '',
-      quantity: manualMetadata?.quantity ? String(manualMetadata.quantity) : firstItem?.quantidade ? String(firstItem.quantidade) : '1',
-    });
-    setSuccess('Rascunho duplicado a partir do historico. Ajuste so o necessario e salve novamente.');
-    setError(null);
-  }
-
-  function handleExportPdf(quoteId: string | null) {
-    if (!quoteId || typeof window === 'undefined') {
-      return;
-    }
-
-    window.open(`/api/quotes/${quoteId}/pdf`, '_blank', 'noopener,noreferrer');
-  }
-
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
@@ -258,8 +213,7 @@ export default function Quotes() {
       });
 
       setQuotes((currentQuotes) => [response.data, ...currentQuotes]);
-      setLastSavedQuoteId(response.data.id);
-      setSuccess('Cotacao salva com o novo resumo comercial. O PDF pode ser exportado em seguida.');
+      setSuccess('Cotacao salva com o novo resumo comercial.');
       setDraft((currentDraft) => ({
         ...getDefaultDraft(),
         printerId: currentDraft.printerId,
@@ -314,7 +268,57 @@ export default function Quotes() {
               <div className="grid gap-4 xl:grid-cols-3">
                 <NumericInput label="Peso" value={draft.materialWeightGrams} onChange={(materialWeightGramsValue) => updateDraft({ materialWeightGrams: materialWeightGramsValue })} suffix="g" hint="material" />
                 <NumericInput label="Tempo" value={draft.printHours} onChange={(printHoursValue) => updateDraft({ printHours: printHoursValue })} suffix="h" hint="horas" />
-                <NumericInput label="Quantidade" value={draft.quantity} onChange={(quantityValue) => updateDraft({ quantity: quantityValue })} hint="unid." />
+                <label className="flex min-h-[132px] flex-col rounded-[28px] border border-white/10 bg-[#0a1228]/85 p-4 shadow-[0_16px_50px_rgba(0,0,0,0.18)]">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <span className="block text-sm font-medium leading-5 text-slate-200">Quantidade</span>
+                      <span className="block text-[11px] uppercase tracking-[0.22em] text-slate-500">unid.</span>
+                    </div>
+                    <button
+                      type="button"
+                      aria-label="Abrir presets de quantidade"
+                      aria-expanded={showQuantityPresets}
+                      onClick={() => setShowQuantityPresets((currentValue) => !currentValue)}
+                      className={`flex h-10 w-10 items-center justify-center rounded-full border text-sm font-semibold transition ${
+                        showQuantityPresets ? 'border-cyan-400/35 bg-cyan-400/[0.08] text-cyan-200' : 'border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]'
+                      }`}
+                    >
+                      +
+                    </button>
+                  </div>
+
+                  <div className="mt-4 flex min-h-[60px] items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 focus-within:border-cyan-400/40 focus-within:bg-cyan-400/[0.05]">
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="1"
+                      min="1"
+                      value={draft.quantity}
+                      onChange={(event) => updateDraft({ quantity: event.target.value })}
+                      className="w-full border-0 bg-transparent p-0 text-base font-semibold text-white outline-none placeholder:text-slate-500"
+                    />
+                  </div>
+
+                  {showQuantityPresets ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {[1, 5, 10, 25].map((presetQuantity) => (
+                        <button
+                          key={presetQuantity}
+                          type="button"
+                          onClick={() => {
+                            applyQuantityPreset(presetQuantity);
+                            setShowQuantityPresets(false);
+                          }}
+                          className={`rounded-full px-3 py-2 text-xs font-semibold transition ${
+                            totalQuantity === presetQuantity ? 'bg-cyan-400 text-slate-950' : 'border border-white/10 bg-white/[0.04] text-slate-200 hover:bg-white/[0.08]'
+                          }`}
+                        >
+                          {presetQuantity} un
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </label>
               </div>
 
               {printers.length ? (
@@ -403,72 +407,13 @@ export default function Quotes() {
               <PricingCard label="Valor por unidade" value={averageUnitPrice} formatter={formatCurrency} description="Media por unidade desta cotacao." tone="warm" />
             </div>
 
-            <div className="mt-6 rounded-[30px] border border-white/10 bg-white/[0.04] p-5">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-sm font-medium text-white">Quick presets</p>
-                  <p className="mt-1 text-sm text-slate-400">Aplique quantidades sem reabrir o teclado.</p>
-                </div>
-                <div className="rounded-full bg-white/[0.08] px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-slate-300">
-                  Base atual
-                </div>
-              </div>
-
-              <div className="mt-4 flex flex-wrap gap-3">
-                {[1, 5, 10, 25].map((quantity) => (
-                  <button
-                    key={quantity}
-                    type="button"
-                    onClick={() => applyQuantityPreset(quantity)}
-                    className={`rounded-2xl px-4 py-3 text-sm font-semibold transition ${
-                      totalQuantity === quantity ? 'bg-cyan-400 text-slate-950' : 'border border-white/10 bg-[#081120] text-slate-200 hover:bg-white/[0.08]'
-                    }`}
-                  >
-                    {quantity} un
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="mt-6 rounded-[30px] border border-white/10 bg-white/[0.04] p-5">
-              <p className="text-sm font-medium text-white">Breakdown rapido</p>
-              <div className="mt-4 space-y-3 text-sm text-slate-300">
-                <div className="flex items-center justify-between gap-4">
-                  <span>Custo dos itens</span>
-                  <span>{formatCurrency(totalItemCost)}</span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span>Custos comerciais</span>
-                  <span>{formatCurrency(additionalOperationalCost)}</span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span>Margem aplicada</span>
-                  <span>{appliedMargin.toFixed(1)}%</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-6 grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
+            <div className="mt-6">
               <button
                 type="submit"
                 disabled={!canSubmit}
-                className="rounded-2xl bg-cyan-400 px-5 py-4 text-sm font-semibold text-slate-950 shadow-[0_18px_40px_rgba(34,211,238,0.22)] transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                className="w-full rounded-2xl bg-cyan-400 px-5 py-4 text-sm font-semibold text-slate-950 shadow-[0_18px_40px_rgba(34,211,238,0.22)] transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
               >
                 Salvar cotacao
-              </button>
-              <button
-                type="button"
-                onClick={() => handleExportPdf(lastSavedQuoteId || recentQuotes[0]?.id || null)}
-                className="rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-4 text-sm font-semibold text-white transition hover:bg-white/[0.08]"
-              >
-                Exportar PDF
-              </button>
-              <button
-                type="button"
-                onClick={() => recentQuotes[0] && duplicateQuote(recentQuotes[0])}
-                className="rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-4 text-sm font-semibold text-white transition hover:bg-white/[0.08]"
-              >
-                Duplicar cotacao
               </button>
             </div>
           </aside>
@@ -478,7 +423,7 @@ export default function Quotes() {
           <div className="flex flex-col gap-4 border-b border-white/10 pb-5 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Historico operacional</p>
-              <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-white">Cotacoes recentes para duplicar, revisar e exportar</h2>
+              <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-white">Cotacoes recentes para consulta rapida</h2>
             </div>
             <p className="text-sm text-slate-400">A proposta fica comercialmente legivel sem abrir telas auxiliares.</p>
           </div>
@@ -491,22 +436,6 @@ export default function Quotes() {
                   <h3 className="mt-3 text-lg font-semibold text-white">{quote.nome_cliente}</h3>
                   <p className="mt-2 text-sm text-slate-400">{quote.items.length} item(ns) • {getSaleChannel((quote.sale_channel as SaleChannel) || 'direct').label}</p>
                   <p className="mt-5 text-2xl font-semibold tracking-[-0.04em] text-cyan-200">{formatCurrency(quote.valor_total)}</p>
-                  <div className="mt-5 flex flex-wrap gap-3">
-                    <button
-                      type="button"
-                      onClick={() => duplicateQuote(quote)}
-                      className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/[0.08]"
-                    >
-                      Duplicar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleExportPdf(quote.id)}
-                      className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/[0.08]"
-                    >
-                      PDF
-                    </button>
-                  </div>
                 </article>
               ))
             ) : (
@@ -524,22 +453,13 @@ export default function Quotes() {
                 <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Live total</p>
                 <p className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-white">{formatCurrency(suggestedPrice)}</p>
               </div>
-              <div className="flex gap-2">
-                <button
-                  type="submit"
-                  disabled={!canSubmit}
-                  className="rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
-                >
-                  Salvar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleExportPdf(lastSavedQuoteId || recentQuotes[0]?.id || null)}
-                  className="rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm font-semibold text-white"
-                >
-                  PDF
-                </button>
-              </div>
+              <button
+                type="submit"
+                disabled={!canSubmit}
+                className="rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+              >
+                Salvar
+              </button>
             </div>
           </div>
         </div>
