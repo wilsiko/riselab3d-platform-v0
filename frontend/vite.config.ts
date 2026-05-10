@@ -11,4 +11,7 @@ export default defineConfig({
       '/api': apiProxyTarget,
     },
   },
+  preview: {
+    allowedHosts: ['.railway.app', 'localhost'],
+  },
 });
