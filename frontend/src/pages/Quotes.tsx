@@ -74,10 +74,6 @@ function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 }
 
-function formatHours(value: number) {
-  return `${value.toFixed(1)} h`;
-}
-
 function parseDecimal(value: string) {
   const parsedValue = Number(value);
   return Number.isFinite(parsedValue) ? parsedValue : 0;
@@ -170,18 +166,6 @@ export default function Quotes() {
 
   function updateDraft(partial: Partial<QuoteDraft>) {
     setDraft((currentDraft) => ({ ...currentDraft, ...partial }));
-  }
-
-  function clearDraft() {
-    setDraft(getDefaultDraft());
-    setLastSavedQuoteId(null);
-    setSuccess(null);
-    setError(null);
-
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem(QUOTE_DRAFT_STORAGE_KEY);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
   }
 
   function applyQuantityPreset(nextQuantity: number) {
@@ -301,30 +285,15 @@ export default function Quotes() {
     <div className="space-y-8">
       <Loading isLoading={isLoading} label="Atualizando o cockpit comercial..." />
 
-      <section className="rounded-[34px] border border-white/10 bg-[linear-gradient(135deg,rgba(8,14,30,0.98),rgba(14,31,58,0.92),rgba(8,145,178,0.18))] p-6 shadow-[0_28px_90px_rgba(0,0,0,0.28)] sm:p-8">
-        <div className="max-w-3xl">
-          <h1 className="text-4xl font-semibold tracking-[-0.05em] text-white">Cotacao modular, leitura financeira imediata e sensacao real de produto.</h1>
-          <p className="mt-4 text-sm leading-7 text-slate-300">
-            Informe a base tecnica minima da impressao e ajuste a camada comercial apenas quando necessario. A mesa precisa resolver a cotacao com poucos passos.
-          </p>
-        </div>
-      </section>
-
       {error ? <Alert type="error" message={error} onClose={() => setError(null)} /> : null}
       {success ? <Alert type="success" message={success} onClose={() => setSuccess(null)} /> : null}
 
       <form onSubmit={handleSubmit} className="space-y-8">
         <div className="grid gap-6 xl:grid-cols-[1.15fr_0.92fr_1fr]">
           <section className="rounded-[34px] border border-white/10 bg-white/[0.035] p-5 shadow-[0_24px_90px_rgba(0,0,0,0.24)] backdrop-blur-2xl sm:p-6">
-            <div className="flex flex-col gap-4 border-b border-white/10 pb-5 sm:flex-row sm:items-end sm:justify-between">
+            <div className="border-b border-white/10 pb-5">
               <h2 className="text-xl font-semibold tracking-[-0.04em] text-white">Impressao</h2>
-              <button
-                type="button"
-                onClick={clearDraft}
-                className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-semibold text-slate-200 transition hover:bg-white/[0.08]"
-              >
-                Limpar mesa
-              </button>
+              <p className="mt-2 text-sm leading-6 text-slate-400">Selecione a impressora e informe apenas os dados basicos da impressao.</p>
             </div>
 
             <div className="mt-6 space-y-5">
@@ -351,7 +320,7 @@ export default function Quotes() {
                 </div>
               ) : null}
 
-              <div className="grid gap-4 md:grid-cols-3">
+              <div className="grid gap-4 xl:grid-cols-3">
                 <NumericInput label="Material em gramas" value={draft.materialWeightGrams} onChange={(materialWeightGramsValue) => updateDraft({ materialWeightGrams: materialWeightGramsValue })} suffix="g" hint="consumo" />
                 <NumericInput label="Tempo em horas" value={draft.printHours} onChange={(printHoursValue) => updateDraft({ printHours: printHoursValue })} suffix="h" hint="duracao" />
                 <NumericInput label="Quantidade" value={draft.quantity} onChange={(quantityValue) => updateDraft({ quantity: quantityValue })} hint="unidades" />

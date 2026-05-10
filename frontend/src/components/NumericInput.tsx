@@ -22,13 +22,13 @@ export function NumericInput({
   min = '0',
 }: NumericInputProps) {
   return (
-    <label className="block rounded-[28px] border border-white/10 bg-[#0a1228]/85 p-4 shadow-[0_16px_50px_rgba(0,0,0,0.18)]">
-      <div className="flex items-center justify-between gap-4">
-        <span className="text-sm font-medium text-slate-200">{label}</span>
-        {hint ? <span className="text-[11px] uppercase tracking-[0.22em] text-slate-500">{hint}</span> : null}
+    <label className="flex min-h-[132px] flex-col rounded-[28px] border border-white/10 bg-[#0a1228]/85 p-4 shadow-[0_16px_50px_rgba(0,0,0,0.18)]">
+      <div className="space-y-1">
+        <span className="block text-sm font-medium leading-5 text-slate-200">{label}</span>
+        {hint ? <span className="block text-[11px] uppercase tracking-[0.22em] text-slate-500">{hint}</span> : null}
       </div>
 
-      <div className="mt-3 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 focus-within:border-cyan-400/40 focus-within:bg-cyan-400/[0.05]">
+      <div className="mt-4 flex min-h-[60px] items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 focus-within:border-cyan-400/40 focus-within:bg-cyan-400/[0.05]">
         {prefix ? <span className="text-sm font-semibold text-cyan-200">{prefix}</span> : null}
         <input
           type="number"
