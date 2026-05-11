@@ -8,7 +8,7 @@ function getCookieOptions() {
 
   return {
     httpOnly: true,
-    sameSite: 'lax' as const,
+    sameSite: isSecure ? ('none' as const) : ('lax' as const),
     secure: isSecure,
     path: '/',
     maxAge: SESSION_TTL_MS,
@@ -74,5 +74,6 @@ export async function clearSession(req: Request, res: Response) {
     await prisma.authSession.deleteMany({ where: { tokenHash: sha256(token) } });
   }
 
-  res.clearCookie(AUTH_COOKIE_NAME, getCookieOptions());
+  const { maxAge, ...cookieOptions } = getCookieOptions();
+  res.clearCookie(AUTH_COOKIE_NAME, cookieOptions);
 }
