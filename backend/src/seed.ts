@@ -5,7 +5,6 @@ import { calculateProductCosts } from './services/cost';
 
 function buildTenantPrinterData(tenantId: string) {
   return printerCatalogSeeds.map((printer) => ({
-    id: printer.id,
     tenantId,
     nome: printer.nome,
     brand: printer.brand,
@@ -25,6 +24,10 @@ function buildTenantPrinterData(tenantId: string) {
     custo_aquisicao: printer.custo_aquisicao,
     vida_util_horas: printer.vida_util_horas,
   }));
+}
+
+function getTenantSampleSku(tenantId: string) {
+  return `Suporte_Preto_P_${tenantId}`;
 }
 
 async function main() {
@@ -53,18 +56,10 @@ async function main() {
     data: buildTenantPrinterData(tenantId),
   });
 
-  const printer = await prisma.printer.findUniqueOrThrow({ where: { id: printerCatalogSeeds[0].id } });
+  const printer = await prisma.printer.findFirstOrThrow({ where: { tenantId }, orderBy: { nome: 'asc' } });
 
-  await prisma.filament.upsert({
-    where: { id: 'filament_1' },
-    update: {
-      marca: 'Prusa',
-      tipo: 'PLA',
-      custo_por_kg: 120,
-      tenantId,
-    },
-    create: {
-      id: 'filament_1',
+  const filament = await prisma.filament.create({
+    data: {
       tenantId,
       marca: 'Prusa',
       tipo: 'PLA',
@@ -79,7 +74,6 @@ async function main() {
   });
 
   const settings = await prisma.globalSettings.findUniqueOrThrow({ where: { tenantId } });
-  const filament = await prisma.filament.findUniqueOrThrow({ where: { id: 'filament_1' } });
   const costData = calculateProductCosts(
     50,
     1.5,
@@ -91,18 +85,18 @@ async function main() {
   );
 
   await prisma.product.upsert({
-    where: { sku: 'Suporte_Preto_P' },
-    update: { nome: 'Suporte', cor: 'Preto', variacao: 'P', peso_gramas: 50, tempo_impressao_horas: 1.5, printerId: printer.id, filamentId: 'filament_1', custo_material: costData.custoMaterial, custo_energia: costData.custoEnergia, custo_amortizacao: costData.custoAmortizacao, custo_total: costData.custoTotal, tenantId },
+    where: { sku: getTenantSampleSku(tenantId) },
+    update: { nome: 'Suporte', cor: 'Preto', variacao: 'P', peso_gramas: 50, tempo_impressao_horas: 1.5, printerId: printer.id, filamentId: filament.id, custo_material: costData.custoMaterial, custo_energia: costData.custoEnergia, custo_amortizacao: costData.custoAmortizacao, custo_total: costData.custoTotal, tenantId },
     create: {
       tenantId,
       nome: 'Suporte',
       cor: 'Preto',
       variacao: 'P',
-      sku: 'Suporte_Preto_P',
+      sku: getTenantSampleSku(tenantId),
       peso_gramas: 50,
       tempo_impressao_horas: 1.5,
       printerId: printer.id,
-      filamentId: 'filament_1',
+      filamentId: filament.id,
       custo_material: costData.custoMaterial,
       custo_energia: costData.custoEnergia,
       custo_amortizacao: costData.custoAmortizacao,

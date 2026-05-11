@@ -59,7 +59,7 @@ function createEmptyPrinterDraft(): PrinterDraft {
 }
 
 export default function PricingSetup() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const redirectToLogin = useAuthRedirect();
   const [settings, setSettings] = useState<Settings>(defaultSettings);
   const [settingsForm, setSettingsForm] = useState(mapSettingsToForm(defaultSettings));
@@ -71,6 +71,10 @@ export default function PricingSetup() {
   const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
+    if (isAuthLoading) {
+      return;
+    }
+
     const loadPricing = async () => {
       try {
         setIsLoading(true);
@@ -90,7 +94,7 @@ export default function PricingSetup() {
     };
 
     loadPricing();
-  }, []);
+  }, [isAuthenticated, isAuthLoading]);
 
   function updateSettingsForm(field: keyof typeof settingsForm, value: string) {
     setSettingsForm((currentForm) => ({

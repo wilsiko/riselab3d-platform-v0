@@ -4,7 +4,6 @@ import { calculateProductCosts } from '../services/cost';
 
 function buildTenantPrinterData(tenantId: string) {
   return printerCatalogSeeds.map((printer) => ({
-    id: printer.id,
     tenantId,
     nome: printer.nome,
     brand: printer.brand,
@@ -26,6 +25,10 @@ function buildTenantPrinterData(tenantId: string) {
   }));
 }
 
+function getTenantSampleSku(tenantId: string) {
+  return `Suporte_Preto_P_${tenantId}`;
+}
+
 export async function ensureTenantOperationalBaseline(tenantId: string, tenantName = 'RiseLab3D Company') {
   await prisma.tenant.upsert({
     where: { id: tenantId },
@@ -33,15 +36,17 @@ export async function ensureTenantOperationalBaseline(tenantId: string, tenantNa
     create: { id: tenantId, name: tenantName },
   });
 
-  await prisma.printer.createMany({
-    data: buildTenantPrinterData(tenantId),
-    skipDuplicates: true,
-  });
+  const printerCount = await prisma.printer.count({ where: { tenantId } });
+
+  if (!printerCount) {
+    await prisma.printer.createMany({
+      data: buildTenantPrinterData(tenantId),
+    });
+  }
 
   await prisma.printer.updateMany({
     where: {
       tenantId,
-      id: { in: printerCatalogSeeds.map((printer) => printer.id) },
       vida_util_horas: 4000,
     },
     data: {
@@ -49,22 +54,29 @@ export async function ensureTenantOperationalBaseline(tenantId: string, tenantNa
     },
   });
 
-  await prisma.filament.upsert({
-    where: { id: 'filament_1' },
-    update: {
-      marca: 'Prusa',
-      tipo: 'PLA',
-      custo_por_kg: 120,
-      tenantId,
-    },
-    create: {
-      id: 'filament_1',
+  const existingFilament = await prisma.filament.findFirst({
+    where: {
       tenantId,
       marca: 'Prusa',
       tipo: 'PLA',
-      custo_por_kg: 120,
     },
   });
+
+  const filament = existingFilament
+    ? await prisma.filament.update({
+        where: { id: existingFilament.id },
+        data: {
+          custo_por_kg: 120,
+        },
+      })
+    : await prisma.filament.create({
+        data: {
+          tenantId,
+          marca: 'Prusa',
+          tipo: 'PLA',
+          custo_por_kg: 120,
+        },
+      });
 
   await prisma.globalSettings.upsert({
     where: { tenantId },
@@ -72,8 +84,10 @@ export async function ensureTenantOperationalBaseline(tenantId: string, tenantNa
     create: { tenantId, custo_kwh: 1.05, direct_margin_percent: 20, ecommerce_margin_percent: 35, end_customer_margin_percent: 50, error_rate_percent: 10 },
   });
 
-  const printer = await prisma.printer.findUnique({ where: { id: printerCatalogSeeds[0].id } });
-  const filament = await prisma.filament.findUnique({ where: { id: 'filament_1' } });
+  const printer = await prisma.printer.findFirst({
+    where: { tenantId },
+    orderBy: { nome: 'asc' },
+  });
   const settings = await prisma.globalSettings.findUnique({ where: { tenantId } });
 
   if (printer && filament && settings) {
@@ -88,18 +102,18 @@ export async function ensureTenantOperationalBaseline(tenantId: string, tenantNa
     );
 
     await prisma.product.upsert({
-      where: { sku: 'Suporte_Preto_P' },
-      update: { nome: 'Suporte', cor: 'Preto', variacao: 'P', peso_gramas: 50, tempo_impressao_horas: 1.5, printerId: printer.id, filamentId: 'filament_1', custo_material: costData.custoMaterial, custo_energia: costData.custoEnergia, custo_amortizacao: costData.custoAmortizacao, custo_total: costData.custoTotal, tenantId },
+      where: { sku: getTenantSampleSku(tenantId) },
+      update: { nome: 'Suporte', cor: 'Preto', variacao: 'P', peso_gramas: 50, tempo_impressao_horas: 1.5, printerId: printer.id, filamentId: filament.id, custo_material: costData.custoMaterial, custo_energia: costData.custoEnergia, custo_amortizacao: costData.custoAmortizacao, custo_total: costData.custoTotal, tenantId },
       create: {
         tenantId,
         nome: 'Suporte',
         cor: 'Preto',
         variacao: 'P',
-        sku: 'Suporte_Preto_P',
+        sku: getTenantSampleSku(tenantId),
         peso_gramas: 50,
         tempo_impressao_horas: 1.5,
         printerId: printer.id,
-        filamentId: 'filament_1',
+        filamentId: filament.id,
         custo_material: costData.custoMaterial,
         custo_energia: costData.custoEnergia,
         custo_amortizacao: costData.custoAmortizacao,
@@ -134,7 +148,6 @@ export async function provisionTenantForUser(name: string, email: string) {
 
   await prisma.printer.createMany({
     data: buildTenantPrinterData(tenant.id),
-    skipDuplicates: true,
   });
 
   return tenant;
