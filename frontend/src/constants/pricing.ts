@@ -10,8 +10,8 @@ export const SALE_CHANNELS: Array<{ id: SaleChannel; label: string; description:
   },
   {
     id: 'ecommerce',
-    label: 'E-commerce',
-    description: 'Canal com mais atrito operacional, taxas e necessidade de margem mais protegida.',
+    label: 'Personalizado',
+    description: 'Canal customizado para cenarios com regras comerciais proprias e margem ajustada pela operacao.',
   },
   {
     id: 'end_customer',

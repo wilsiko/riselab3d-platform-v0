@@ -83,7 +83,7 @@ export function buildQuotePricingOptions(baseCost: number, settings: QuotePricin
     },
     {
       id: 'ecommerce',
-      label: 'Venda em E-Commerce',
+      label: 'Venda personalizada',
       marginPercent: settings.margem_venda_ecommerce,
       finalPrice: applyMargin(baseCost, settings.margem_venda_ecommerce),
     },

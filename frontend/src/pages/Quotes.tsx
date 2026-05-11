@@ -569,6 +569,25 @@ export default function Quotes() {
     };
   }, [isAuthenticated, quoteId, redirectToLogin, shareToken]);
 
+  useEffect(() => {
+    if (!draft.printerId) {
+      return;
+    }
+
+    if (!printers.length) {
+      return;
+    }
+
+    const printerStillAvailable = printers.some((printer) => printer.id === draft.printerId);
+
+    if (!printerStillAvailable) {
+      setDraft((currentDraft) => ({ ...currentDraft, printerId: '' }));
+      setPersistedQuote(null);
+      setPersistedSignature(null);
+      setPublicShareUrl(null);
+    }
+  }, [draft.printerId, printers]);
+
   const saleChannels = getSaleChannels(settings);
   const selectedChannel = getSaleChannel(draft.saleChannel, settings);
   const selectedPrinter = printers.find((printer) => printer.id === draft.printerId) || null;
@@ -872,7 +891,7 @@ export default function Quotes() {
       nextFieldErrors.quantity = 'Informe uma quantidade inteira maior que zero.';
     }
 
-    if (!draft.printerId) {
+    if (!draft.printerId || !selectedPrinter) {
       nextFieldErrors.printerId = 'Selecione a impressora usada para produzir esta cotacao.';
     }
 

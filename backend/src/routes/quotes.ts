@@ -10,7 +10,7 @@ const router = Router();
 
 const SALE_CHANNEL_LABELS: Record<string, string> = {
   direct: 'Venda direta',
-  ecommerce: 'E-commerce',
+  ecommerce: 'Personalizado',
   end_customer: 'Usuario final',
 };
 
