@@ -208,11 +208,8 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="mt-5 flex items-center justify-between gap-3 border-t border-white/10 pt-5 text-sm text-slate-400">
+        <div className="mt-5 border-t border-white/10 pt-5 text-sm text-slate-400">
           <p>{isAuthenticated ? `${filteredQuotes.length} resultado(s) exibido(s)` : 'Historico salvo liberado apenas apos login'}</p>
-          <Link to="/quotes" className="font-semibold text-cyan-200 transition hover:text-cyan-100">
-            Abrir fluxo completo
-          </Link>
         </div>
 
         <div className="mt-6 space-y-3">

@@ -1509,10 +1509,7 @@ export default function Quotes() {
                   <Link key={quote.id} to={`/quotes?quote=${quote.id}`} className="block rounded-[30px] border border-white/10 bg-[#0a1228]/78 p-5 shadow-[0_18px_60px_rgba(0,0,0,0.2)] transition hover:border-cyan-400/35 hover:bg-cyan-400/[0.08]">
                     <h3 className="mt-3 text-lg font-semibold text-white">{productName}</h3>
                     <p className="mt-2 text-xl font-semibold tracking-[-0.03em] text-cyan-200">{unitCost !== null ? formatCurrency(unitCost) : 'Custo unitario nao informado'}</p>
-                    <div className="mt-4">
-                      <QuoteErrorRateSummary summary={summary} />
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-2">{renderChannelPriceBadges(unitCost, saleChannels)}</div>
+                    <div className="mt-4 flex flex-wrap gap-2">{renderChannelPriceBadges(unitCost, saleChannels)}</div>
                     <div className="mt-4 space-y-1 text-sm text-slate-400">
                       <p>{quote.nome_cliente}</p>
                       <p>{formatQuoteTimestamp(quote.createdAt)}</p>
