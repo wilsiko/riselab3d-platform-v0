@@ -5,6 +5,39 @@ export interface ValidationError {
   message: string;
 }
 
+export function calculatePrinterHourlyCost(
+  printer: Pick<Printer, 'custo_aquisicao' | 'vida_util_horas'> | null,
+) {
+  if (!printer || printer.custo_aquisicao <= 0 || printer.vida_util_horas <= 0) {
+    return 0;
+  }
+
+  return printer.custo_aquisicao / printer.vida_util_horas;
+}
+
+export function calculatePrinterEnergyCost(
+  printer: Pick<Printer, 'consumo_watts'> | null,
+  tempoHoras: number,
+  custoKwh: number,
+) {
+  if (!printer || tempoHoras <= 0 || custoKwh <= 0) {
+    return 0;
+  }
+
+  return (printer.consumo_watts / 1000) * tempoHoras * custoKwh;
+}
+
+export function calculatePrinterAmortizationCost(
+  printer: Pick<Printer, 'custo_aquisicao' | 'vida_util_horas'> | null,
+  tempoHoras: number,
+) {
+  if (!printer || tempoHoras <= 0) {
+    return 0;
+  }
+
+  return calculatePrinterHourlyCost(printer) * tempoHoras;
+}
+
 function toPascalCaseSegment(value: string) {
   return value
     .trim()
@@ -47,8 +80,8 @@ export function calculateProductCosts(
   falhaPercentual = 10,
 ) {
   const custoMaterial = (pesoGramas / 1000) * filament.custo_por_kg;
-  const custoEnergia = printer ? (printer.consumo_watts / 1000) * tempoHoras * custoKwh : 0;
-  const custoAmortizacao = printer ? (printer.custo_aquisicao / printer.vida_util_horas) * tempoHoras : 0;
+  const custoEnergia = calculatePrinterEnergyCost(printer, tempoHoras, custoKwh);
+  const custoAmortizacao = calculatePrinterAmortizationCost(printer, tempoHoras);
   const subtotal = custoMaterial + custoEnergia + custoAmortizacao + additionalCost;
   const custoFalhas = subtotal * (falhaPercentual / 100);
   const custoTotal = subtotal + custoFalhas;
@@ -56,6 +89,7 @@ export function calculateProductCosts(
   return {
     custoMaterial,
     custoEnergia,
+    custoHoraImpressora: calculatePrinterHourlyCost(printer),
     custoAmortizacao,
     custoFalhas,
     falhaPercentual,

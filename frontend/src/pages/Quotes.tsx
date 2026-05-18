@@ -190,30 +190,45 @@ function parseDurationHours(value: string) {
     return 0;
   }
 
-  if (/^\d+([\.,]\d+)?$/.test(normalizedValue)) {
-    return parseDecimal(normalizedValue);
-  }
-
-  const parts = normalizedValue.split(':');
-
-  if (![2, 3].includes(parts.length) || parts.some((part) => !/^\d+$/.test(part))) {
+  if (!/^\d+:\d{2}$/.test(normalizedValue)) {
     return 0;
   }
 
-  const numericParts = parts.map(Number);
-  const [hoursPart, minutesPart, secondsPart] = parts.length === 2
-    ? [0, numericParts[0], numericParts[1]]
-    : numericParts;
+  const [hoursPart, minutesPart] = normalizedValue.split(':').map(Number);
 
-  if (minutesPart >= 60 || secondsPart >= 60) {
+  if (minutesPart >= 60) {
     return 0;
   }
 
-  return hoursPart + minutesPart / 60 + secondsPart / 3600;
+  return hoursPart + minutesPart / 60;
 }
 
 function roundCurrency(value: number) {
   return Number(value.toFixed(2));
+}
+
+function calculatePrinterEnergyCost(printer: Printer | null, printHours: number, costPerKwh: number) {
+  if (!printer || printHours <= 0 || costPerKwh <= 0) {
+    return 0;
+  }
+
+  return (printer.consumo_watts / 1000) * printHours * costPerKwh;
+}
+
+function calculatePrinterHourlyCost(printer: Printer | null) {
+  if (!printer || printer.custo_aquisicao <= 0 || printer.vida_util_horas <= 0) {
+    return 0;
+  }
+
+  return printer.custo_aquisicao / printer.vida_util_horas;
+}
+
+function calculatePrinterAmortizationCost(printer: Printer | null, printHours: number) {
+  if (!printer || printHours <= 0) {
+    return 0;
+  }
+
+  return calculatePrinterHourlyCost(printer) * printHours;
 }
 
 function formatDurationFromHours(value: number) {
@@ -221,16 +236,11 @@ function formatDurationFromHours(value: number) {
     return '';
   }
 
-  const totalSeconds = Math.round(value * 3600);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
+  const totalMinutes = Math.round(value * 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
 
-  if (hours > 0) {
-    return [hours, minutes, seconds].map((part) => String(part).padStart(2, '0')).join(':');
-  }
-
-  return [minutes, seconds].map((part) => String(part).padStart(2, '0')).join(':');
+  return [hours, minutes].map((part) => String(part).padStart(2, '0')).join(':');
 }
 
 function getDraftSignature(draft: QuoteDraft) {
@@ -600,12 +610,9 @@ export default function Quotes() {
   const packagingCost = parseDecimal(draft.packagingCost);
   const additionalOperationalCost = laborCost + packagingCost;
   const materialCostPerUnit = materialWeightGrams > 0 && filamentCostPerKg > 0 ? (materialWeightGrams / 1000) * filamentCostPerKg : 0;
-  const energyCostPerUnit = selectedPrinter && printHours > 0
-    ? (selectedPrinter.consumo_watts / 1000) * printHours * settings.custo_kwh
-    : 0;
-  const amortizationCostPerUnit = selectedPrinter && printHours > 0
-    ? (selectedPrinter.custo_aquisicao / selectedPrinter.vida_util_horas) * printHours
-    : 0;
+  const energyCostPerUnit = calculatePrinterEnergyCost(selectedPrinter, printHours, settings.custo_kwh);
+  const hourlyPrinterCost = calculatePrinterHourlyCost(selectedPrinter);
+  const amortizationCostPerUnit = calculatePrinterAmortizationCost(selectedPrinter, printHours);
   const technicalBaseCostPerUnit = materialCostPerUnit + energyCostPerUnit + amortizationCostPerUnit;
   const failureCostPerUnit = technicalBaseCostPerUnit * (settings.error_rate_percent / 100);
 
@@ -615,8 +622,8 @@ export default function Quotes() {
     }
 
     const materialCost = (materialWeightGrams / 1000) * filamentCostPerKg;
-    const energyCost = (selectedPrinter.consumo_watts / 1000) * printHours * settings.custo_kwh;
-    const amortizationCost = (selectedPrinter.custo_aquisicao / selectedPrinter.vida_util_horas) * printHours;
+    const energyCost = calculatePrinterEnergyCost(selectedPrinter, printHours, settings.custo_kwh);
+    const amortizationCost = calculatePrinterAmortizationCost(selectedPrinter, printHours);
     const technicalBaseCost = materialCost + energyCost + amortizationCost;
     return technicalBaseCost + technicalBaseCost * (settings.error_rate_percent / 100);
   }, [filamentCostPerKg, materialWeightGrams, printHours, selectedPrinter, settings.custo_kwh, settings.error_rate_percent]);
@@ -688,7 +695,8 @@ export default function Quotes() {
                   </div>
                   <div>
                     <p className="text-slate-400">Amortizacao da impressora</p>
-                    <p className="mt-1 text-white">({selectedPrinter ? `${formatCurrency(selectedPrinter.custo_aquisicao)} / ${selectedPrinter.vida_util_horas} h` : '--'}) x {printHours.toFixed(4)} h = {formatCurrency(roundCurrency(amortizationCostPerUnit))}</p>
+                    <p className="mt-1 text-white">Custo/h: {selectedPrinter ? `${formatCurrency(roundCurrency(hourlyPrinterCost))} (${formatCurrency(selectedPrinter.custo_aquisicao)} / ${selectedPrinter.vida_util_horas} h)` : '--'}</p>
+                    <p className="mt-1 text-white">{formatCurrency(roundCurrency(hourlyPrinterCost))} x {printHours.toFixed(4)} h = {formatCurrency(roundCurrency(amortizationCostPerUnit))}</p>
                   </div>
                   <div>
                     <p className="text-slate-400">Taxa de erro aplicada</p>
@@ -882,9 +890,9 @@ export default function Quotes() {
     }
 
     if (!draft.printHours.trim()) {
-      nextFieldErrors.printHours = 'Informe o tempo de impressao no formato hh:mm:ss.';
+      nextFieldErrors.printHours = 'Informe o tempo de impressao em horas, usando HH:MM.';
     } else if (printHours <= 0) {
-      nextFieldErrors.printHours = 'Use o formato hh:mm:ss com um tempo maior que zero. Exemplo: 01:30:00.';
+      nextFieldErrors.printHours = 'Use horas em formato HH:MM. Exemplo: 10:00 ou 01:30.';
     }
 
     if (!draft.quantity.trim() || quantity <= 0) {
@@ -1198,7 +1206,7 @@ export default function Quotes() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-1">
                       <span className="block text-sm font-medium leading-5 text-slate-200">Tempo <span className="text-red-300">*</span></span>
-                      <span className="block text-[11px] uppercase tracking-[0.22em] text-slate-500">HH:MM:SS</span>
+                      <span className="block text-[11px] uppercase tracking-[0.22em] text-slate-500">HH:MM</span>
                     </div>
                     <div className="group relative shrink-0">
                       <button
@@ -1210,7 +1218,7 @@ export default function Quotes() {
                       </button>
                       <div className="pricing-help-popover pointer-events-none absolute right-0 top-[calc(100%+10px)] z-20 w-72 rounded-2xl p-4 text-left text-sm leading-6 opacity-0 transition duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
                         <p className="pricing-help-title text-[11px] font-semibold uppercase tracking-[0.2em]">Formato esperado</p>
-                        <p className="mt-2">Use `HH:MM:SS` ou `MM:SS`.<br />Exemplos validos: `01:30:00` ou `12:45`.</p>
+                        <p className="mt-2">Use apenas `HH:MM`.<br />Exemplos validos: `10:00`, `01:30` ou `00:45`.</p>
                       </div>
                     </div>
                   </div>
@@ -1222,7 +1230,7 @@ export default function Quotes() {
                       inputMode="numeric"
                       value={draft.printHours}
                       onChange={(event) => updateDraft({ printHours: event.target.value })}
-                      placeholder="Ex: MM:SS ou HH:MM:SS"
+                      placeholder="Ex: 10:00 ou 01:30"
                       aria-invalid={fieldErrors.printHours ? 'true' : 'false'}
                       aria-describedby={fieldErrors.printHours ? 'quote-print-hours-error' : undefined}
                       className="w-full border-0 bg-transparent p-0 text-base font-semibold text-white outline-none placeholder:text-slate-500"
