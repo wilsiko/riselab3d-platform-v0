@@ -78,25 +78,30 @@ function App() {
         <div className="marketing-backdrop" aria-hidden="true" />
         <div className="relative mx-auto min-h-screen max-w-[1440px] px-5 pb-12 pt-5 sm:px-8 lg:px-10">
           <header className="marketing-topbar">
-            <Link to="/" className="marketing-brand">
-              <span className="marketing-brand-mark">RL</span>
-              <span>
-                <strong>RiseLab3D</strong>
-                <small>Operacao tecnica para impressao 3D</small>
-              </span>
-            </Link>
+            <div className="marketing-topbar-main">
+              <Link to="/" className="marketing-brand">
+                <span className="marketing-brand-mark">RL</span>
+                <span>
+                  <strong>RiseLab3D</strong>
+                  <small>Filamentos, impressoras e suprimentos 3D em Santos</small>
+                </span>
+              </Link>
 
-            <nav className="marketing-nav" aria-label="Navegacao principal">
-              <a href="#sobre">Sobre</a>
-              <a href="#destaques">Produtos</a>
-              <a href="#showroom">Showroom</a>
-              <a href="#contato">Contato</a>
-            </nav>
+              <nav className="marketing-nav" aria-label="Navegacao principal">
+                <a href="#destaques">Produtos</a>
+                <a href="#sobre">Operacao</a>
+                <a href="#showroom">Showroom</a>
+                <a href="#plataforma">Plataforma de custos</a>
+              </nav>
+            </div>
 
             <div className="marketing-topbar-actions">
-              <Link to="/quotes" className="marketing-inline-action">Plataforma completa gratuita</Link>
+              <a href="#contato" className="marketing-inline-action">Solicitar atendimento</a>
               {isAuthenticated ? (
-                <button type="button" onClick={() => logout()} className="marketing-inline-ghost">Sair</button>
+                <>
+                  <Link to="/quotes" className="marketing-inline-ghost">Abrir plataforma</Link>
+                  <button type="button" onClick={() => logout()} className="marketing-inline-ghost">Sair</button>
+                </>
               ) : (
                 <Link to="/login" className="marketing-inline-ghost">Entrar</Link>
               )}
