@@ -6,62 +6,39 @@ import showroomScene from '../assets/institutional-showroom-scene.svg';
 import api from '../api';
 import { Alert } from '../components/Alert';
 
+const differentiators = [
+  'Pronta entrega',
+  'Estoque local',
+  'Santos/SP',
+  'Suporte tecnico',
+  'Loja fisica em breve',
+  'Plataforma propria',
+];
+
 const highlights = [
   {
     title: 'Filamentos',
-    copy: 'PLA, PETG e materiais de giro rapido com estoque local para reduzir espera e manter a operacao rodando.',
+    copy: 'PLA, PETG e materiais de giro rapido para reposicao, estoque local e compra recorrente.',
     cta: 'Ver linha de materiais',
     href: '#contato',
   },
   {
     title: 'Impressoras 3D',
-    copy: 'Curadoria tecnica para quem precisa comprar melhor, instalar com criterio e operar sem improviso.',
+    copy: 'Impressoras 3D com orientacao tecnica para compra, aplicacao e operacao com mais criterio.',
     cta: 'Solicitar atendimento',
     href: '#contato',
   },
   {
     title: 'Acessorios',
-    copy: 'Itens essenciais para manter produtividade, acabamento e reposicao sem depender de prazos longos.',
+    copy: 'Bicos, superficies, manutencao e itens de apoio para manter sua operacao rodando.',
     cta: 'Consultar disponibilidade',
     href: '#contato',
   },
   {
-    title: 'Projetos personalizados',
-    copy: 'Pecas funcionais, prototipos e pequenas series com leitura tecnica, viabilidade e resposta comercial objetiva.',
+    title: 'Projetos sob demanda',
+    copy: 'Pecas funcionais, prototipos e pequenas series com resposta comercial objetiva e leitura tecnica.',
     cta: 'Enviar projeto',
     href: '#contato',
-  },
-  {
-    title: 'Plataforma de calculo',
-    copy: 'Precificacao, controle operacional e leitura de custo tecnico em uma plataforma propria e gratuita para impressao 3D.',
-    cta: 'Acessar plataforma gratuita',
-    href: '/quotes',
-    externalRoute: true,
-    featured: true,
-  },
-];
-
-const differentiators = [
-  'Estoque local em Santos/SP',
-  'Pronta entrega para itens de maior giro',
-  'Suporte tecnico com leitura pratica de impressao 3D',
-  'Atendimento proximo para compra e pos-venda',
-  'Plataforma propria para calculo e precificacao',
-  'Impressao profissional para demandas funcionais',
-];
-
-const localSearchBlocks = [
-  {
-    title: 'Filamentos em Santos',
-    copy: 'Linha de filamentos para quem busca PLA, PETG e reposicao rapida em Santos e Baixada Santista, com orientacao tecnica para compatibilidade, acabamento e uso real.',
-  },
-  {
-    title: 'Impressoras 3D em Santos',
-    copy: 'Curadoria de impressoras 3D para compra local com suporte tecnico, leitura de aplicacao e atendimento para Santos, Sao Vicente, Praia Grande e Guaruja.',
-  },
-  {
-    title: 'Loja de impressao 3D na Baixada Santista',
-    copy: 'Operacao focada em disponibilidade local, acessorios, produtos impressos e apoio comercial para clientes que precisam decidir sem depender apenas de marketplaces.',
   },
 ];
 
@@ -201,166 +178,118 @@ export default function InstitutionalHome() {
   return (
     <div className="marketing-shell">
       <section className="marketing-hero" id="topo">
-        <div className="marketing-grid">
+        <div className="marketing-hero-grid">
           <div className="marketing-hero-copy">
-            <p className="marketing-eyebrow">Santos/SP • Estoque local • Suporte tecnico • Showroom em breve</p>
-            <div className="marketing-hero-inline-visual marketing-visual-card" aria-hidden="true">
-              <img src={heroScene} alt="" className="marketing-visual-image" />
-            </div>
-            <h1 className="marketing-display">Impressao 3D sem complicacao.</h1>
+            <p className="marketing-eyebrow">Santos/SP • Estoque local • Operacao real</p>
+            <h1 className="marketing-display">Impressao 3D profissional a pronta entrega.</h1>
             <p className="marketing-lead">
-              Filamentos, impressoras 3D, acessorios e producao sob demanda com leitura tecnica, agilidade comercial e operacao local.
+              Filamentos, impressoras, acessorios e suporte tecnico especializado. Loja fisica e showroom interativo em construcao.
             </p>
             <p className="marketing-local-seo-copy">
-              Base em Santos com atendimento para Sao Vicente, Praia Grande, Guaruja e outras cidades litoraneas da Baixada Santista.
+              Operacao local em Santos para atender compra, reposicao e suporte tecnico em toda a Baixada Santista.
             </p>
             <div className="marketing-actions">
-              <a href="#destaques" className="marketing-button marketing-button-primary">Conhecer produtos</a>
-              <Link to="/quotes" className="marketing-button marketing-button-secondary">Acessar plataforma gratuita</Link>
+              <a href="#destaques" className="marketing-button marketing-button-primary">Ver produtos</a>
+              <Link to="/quotes" className="marketing-button marketing-button-secondary">Plataforma de calculo</Link>
             </div>
             <div className="marketing-proof-row" aria-label="Diferenciais principais">
+              <span>Estoque local</span>
               <span>Pronta entrega</span>
-              <span>Revendedor oficial Bambu Lab</span>
-              <span>Atendimento tecnico real</span>
-              <span>Plataforma gratuita</span>
-              <span>Operacao local em Santos</span>
+              <span>Suporte tecnico</span>
+              <span>Santos/SP</span>
+              <span>Showroom em construcao</span>
             </div>
           </div>
 
-          <div className="marketing-hero-stage" aria-hidden="true">
-            <div className="marketing-visual-card marketing-visual-card-hero marketing-hero-desktop-visual">
+          <div className="marketing-hero-stage">
+            <div className="marketing-hero-visual" aria-hidden="true">
               <img src={heroScene} alt="Ilustracao de impressora 3D, painel operacional e materiais da RiseLab3D" className="marketing-visual-image" />
             </div>
-            <div className="marketing-stage-panel marketing-stage-panel-primary">
-              <p className="marketing-stage-label">Operacao local</p>
-              <p className="marketing-stage-title">Loja tecnica para quem compra com criterio.</p>
-              <p className="marketing-stage-copy">Produtos de giro rapido, suporte proximo e base preparada para showroom interativo.</p>
-              <div className="marketing-brand-badge">
-                <span className="marketing-brand-badge-label">Revendedor oficial</span>
-                <strong className="marketing-brand-badge-name">Bambu Lab</strong>
-              </div>
-            </div>
-            <div className="marketing-stage-grid">
-              <div className="marketing-stage-panel">
-                <p className="marketing-stage-metric">24h</p>
-                <p className="marketing-stage-caption">Resposta comercial em ritmo de operacao</p>
+            <div className="marketing-hero-panels">
+              <div className="marketing-stage-panel marketing-stage-panel-primary">
+                <p className="marketing-stage-label">Operacao</p>
+                <p className="marketing-stage-title">Compra tecnica com estoque, suporte e atendimento local.</p>
+                <p className="marketing-stage-copy">Suprimentos, impressoras 3D e acessorios para quem precisa operar com previsibilidade.</p>
               </div>
               <div className="marketing-stage-panel">
-                <p className="marketing-stage-metric">Santos</p>
-                <p className="marketing-stage-caption">Base local para atendimento e retirada</p>
-              </div>
-              <div className="marketing-stage-panel marketing-stage-outline">
-                <p className="marketing-stage-label">Plataforma propria</p>
-                <p className="marketing-stage-caption">Custo, precificacao e leitura operacional em um fluxo unico.</p>
+                <p className="marketing-stage-label">Base local</p>
+                <p className="marketing-stage-caption">Santos/SP com atendimento para compra, retirada e suporte tecnico.</p>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="marketing-section" id="sobre">
+      <section className="marketing-section" id="diferenciais">
         <div className="marketing-section-head">
-          <p className="marketing-eyebrow">Sobre a RiseLab3D</p>
-          <h2>Operacao tecnica, atendimento proximo e estoque real.</h2>
+          <p className="marketing-eyebrow">Diferenciais</p>
+          <h2>Clareza comercial para uma operacao tecnica real.</h2>
         </div>
-        <div className="marketing-about-grid">
-          <div className="marketing-about-copy">
-            <p>
-              A RiseLab3D atende Santos e regiao com foco em impressao 3D funcional. O trabalho combina venda de equipamentos,
-              materiais e acessorios com suporte tecnico baseado em uso real, nao em discurso generico.
-            </p>
-            <p>
-              A operacao foi desenhada para reduzir friccao: orientar a compra certa, manter itens essenciais em estoque local,
-              acelerar reposicao e apoiar empresas e clientes que precisam produzir com previsibilidade.
-            </p>
-            <p>
-              A atuacao cobre Santos, Sao Vicente, Praia Grande, Guaruja e outras cidades litoraneas da Baixada Santista,
-              com foco em disponibilidade local, resposta rapida e suporte tecnico proximo.
-            </p>
-          </div>
-          <div className="marketing-about-aside">
-            <div className="marketing-visual-card marketing-visual-card-light">
-              <img src={materialsScene} alt="Ilustracao de filamentos e materiais organizados para estoque local" className="marketing-visual-image" />
-            </div>
-            <div className="marketing-about-facts">
-              <div className="marketing-about-fact">
-                <span className="marketing-mini-label">Base</span>
-                <strong>Santos/SP</strong>
-              </div>
-              <div className="marketing-about-fact">
-                <span className="marketing-mini-label">Foco</span>
-                <strong>Impressao 3D funcional e comercial</strong>
-              </div>
-              <div className="marketing-about-fact">
-                <span className="marketing-mini-label">Parceria</span>
-                <strong>Revenda oficial Bambu Lab</strong>
-              </div>
-              <div className="marketing-about-fact">
-                <span className="marketing-mini-label">Expansao</span>
-                <strong>Loja fisica e showroom interativo em breve</strong>
-              </div>
-            </div>
-          </div>
+        <div className="marketing-differentials-grid">
+          {differentiators.map((item) => (
+            <article key={item} className="marketing-differential-item">
+              <span className="marketing-differential-index">+</span>
+              <p>{item}</p>
+            </article>
+          ))}
         </div>
       </section>
 
       <section className="marketing-section" id="destaques">
         <div className="marketing-section-head marketing-section-head-inline">
           <div>
-            <p className="marketing-eyebrow">Destaques</p>
-            <h2>Linhas principais para compra, producao e suporte.</h2>
+            <p className="marketing-eyebrow">Produtos principais</p>
+            <h2>Venda tecnica para suprimentos, impressoras e operacao 3D.</h2>
           </div>
-          <p className="marketing-section-note">Cada frente foi pensada para atender operacao, reposicao e decisao tecnica com menos ruído.</p>
+          <p className="marketing-section-note">Loja especializada para compra, reposicao e suporte em impressao 3D.</p>
         </div>
-        <div className="marketing-card-grid">
-          {highlights.map((item, index) => {
-            const Icon = sectionIcons[index];
+        <div className="marketing-products-grid">
+          <div className="marketing-products-copy">
+            <p>
+              A RiseLab3D opera em Santos com foco em impressoras 3D, filamentos, acessorios e apoio tecnico para quem precisa comprar com criterio e manter a operacao rodando.
+            </p>
+            <div className="marketing-products-visual" aria-hidden="true">
+              <img src={materialsScene} alt="Ilustracao de filamentos e materiais organizados para estoque local" className="marketing-visual-image" />
+            </div>
+          </div>
+          <div className="marketing-card-grid">
+            {highlights.map((item, index) => {
+              const Icon = sectionIcons[index];
 
-            return (
-              <article key={item.title} className={`marketing-card${item.featured ? ' marketing-card-featured' : ''}`}>
-                <div className="marketing-card-icon">
-                  <Icon />
-                </div>
-                {item.featured ? <span className="marketing-card-badge">Gratuita</span> : null}
-                <h3>{item.title}</h3>
-                <p>{item.copy}</p>
-                {item.externalRoute ? (
-                  <Link to={item.href} className="marketing-card-link">
-                    {item.cta}
-                    <ArrowIcon />
-                  </Link>
-                ) : (
+              return (
+                <article key={item.title} className="marketing-card">
+                  <div className="marketing-card-icon">
+                    <Icon />
+                  </div>
+                  <h3>{item.title}</h3>
+                  <p>{item.copy}</p>
                   <a href={item.href} className="marketing-card-link">
                     {item.cta}
                     <ArrowIcon />
                   </a>
-                )}
-              </article>
-            );
-          })}
+                </article>
+              );
+            })}
+          </div>
         </div>
       </section>
 
       <section className="marketing-section marketing-showroom" id="showroom">
         <div className="marketing-showroom-copy">
-          <p className="marketing-eyebrow">Loja fisica e showroom</p>
-          <h2>Uma base presencial para demonstracao, retirada e decisao com mais seguranca.</h2>
+          <p className="marketing-eyebrow">Showroom interativo</p>
+          <h2>Showroom interativo em construcao.</h2>
           <p>
-            A proxima etapa da RiseLab3D inclui loja fisica e showroom interativo em Santos. A proposta e simples: aproximar teste,
-            demonstracao, consultoria e disponibilidade real em um ambiente tecnico e direto.
+            Estamos construindo um espaco fisico para demonstracoes, testes de materiais e experiencia pratica com impressao 3D.
           </p>
-          <div className="marketing-showroom-list">
+          <div className="marketing-showroom-list marketing-showroom-list-compact">
             <div className="marketing-showroom-list-item">
-              <span className="marketing-showroom-list-title">Demonstracao real</span>
-              <p>Comparacao de maquinas, materiais e aplicacoes em um ambiente preparado para decisao tecnica.</p>
+              <span className="marketing-showroom-list-title">Demonstracoes reais</span>
             </div>
             <div className="marketing-showroom-list-item">
-              <span className="marketing-showroom-list-title">Retirada e atendimento</span>
-              <p>Base local para acelerar compra, retirada de itens e orientacao presencial quando fizer sentido.</p>
+              <span className="marketing-showroom-list-title">Testes de materiais</span>
             </div>
             <div className="marketing-showroom-list-item">
               <span className="marketing-showroom-list-title">Experiencia pratica</span>
-              <p>Contato direto com impressoras, acessorios e operacao real, sem depender apenas de foto ou ficha tecnica.</p>
             </div>
           </div>
         </div>
@@ -369,68 +298,24 @@ export default function InstitutionalHome() {
             <img src={showroomScene} alt="Ilustracao de showroom tecnico com impressoras 3D e area de demonstracao" className="marketing-showroom-image" />
             <div className="marketing-showroom-overlay">
               <span className="marketing-mini-label">Base RiseLab3D</span>
-              <strong>Showroom interativo com retirada, demonstracao e conversa tecnica no mesmo fluxo.</strong>
-            </div>
-          </div>
-          <div className="marketing-showroom-grid">
-            <div className="marketing-showroom-card">
-              <span className="marketing-mini-label">Retirada local</span>
-              <strong>Santos/SP com mais previsibilidade para compra e reposicao.</strong>
-            </div>
-            <div className="marketing-showroom-card">
-              <span className="marketing-mini-label">Consultoria</span>
-              <strong>Orientacao presencial para escolher maquina, material e aplicacao certa.</strong>
+              <strong>Espaco em desenvolvimento para demonstracao de impressoras, testes de materiais e atendimento proximo.</strong>
             </div>
           </div>
           <div className="marketing-showroom-note">
-            <span className="marketing-mini-label">Em breve</span>
-            <strong>Demonstracoes, comparacao de maquinas e experiencia pratica no mesmo espaco.</strong>
+            <span className="marketing-mini-label">Expansao da marca</span>
+            <strong>Loja fisica e showroom em desenvolvimento para fortalecer a operacao local.</strong>
           </div>
-        </div>
-      </section>
-
-      <section className="marketing-section" id="diferenciais">
-        <div className="marketing-section-head">
-          <p className="marketing-eyebrow">Diferenciais</p>
-          <h2>Menos ruído. Mais previsibilidade comercial e tecnica.</h2>
-        </div>
-        <div className="marketing-differentials-grid">
-          {differentiators.map((item) => (
-            <div key={item} className="marketing-differential-item">
-              <span className="marketing-differential-index">+</span>
-              <p>{item}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="marketing-section" id="busca-local">
-        <div className="marketing-section-head marketing-section-head-inline">
-          <div>
-            <p className="marketing-eyebrow">Busca local</p>
-            <h2>Blocos orientados para quem procura impressao 3D em Santos.</h2>
-          </div>
-          <p className="marketing-section-note">Conteudo direto para consultas transacionais, sem enrolacao editorial e sem parecer texto enxertado.</p>
-        </div>
-        <div className="marketing-local-search-grid">
-          {localSearchBlocks.map((item) => (
-            <article key={item.title} className="marketing-local-search-card">
-              <h3>{item.title}</h3>
-              <p>{item.copy}</p>
-            </article>
-          ))}
         </div>
       </section>
 
       <section className="marketing-section marketing-platform" id="plataforma">
         <div className="marketing-platform-copy">
           <p className="marketing-eyebrow">Plataforma completa para calculo dos custos de impressao</p>
-          <h2>Uma camada operacional propria para precificar melhor e manter controle real da producao.</h2>
+          <h2>Ferramenta profissional da operacao RiseLab3D.</h2>
           <p>
-            A plataforma da RiseLab3D continua ativa como produto secundario do site institucional. Ela organiza custo tecnico,
-            leitura de energia, amortizacao, precificacao por canal e historico operacional em um fluxo unico. O acesso e gratuito.
+            A plataforma da RiseLab3D permanece ativa como ferramenta secundaria da empresa. Ela organiza custo tecnico, amortizacao, energia, precificacao e historico operacional em um fluxo unico.
           </p>
-          <p className="marketing-platform-emphasis">Uso gratuito para simular, calcular e estruturar a precificacao da operacao 3D.</p>
+          <p className="marketing-platform-emphasis">Uso gratuito para calcular custos e estruturar a precificacao da producao 3D.</p>
           <ul className="marketing-feature-list">
             <li>Calculo de custo por material, energia e amortizacao</li>
             <li>Controle operacional de cotacoes e historico</li>
@@ -461,10 +346,10 @@ export default function InstitutionalHome() {
       <section className="marketing-section" id="contato">
         <div className="marketing-section-head marketing-section-head-inline">
           <div>
-            <p className="marketing-eyebrow">Contato</p>
-            <h2>Fale com a RiseLab3D pelo site.</h2>
+            <p className="marketing-eyebrow">Solicite atendimento</p>
+            <h2>Envie sua demanda comercial ou tecnica.</h2>
           </div>
-          <p className="marketing-section-note">Envie sua necessidade comercial ou tecnica. O formulario encaminha a mensagem para contato@riselab3d.com.br.</p>
+          <p className="marketing-section-note">Formulario direto para impressoras, filamentos, acessorios, suporte ou projetos personalizados.</p>
         </div>
         <div className="marketing-contact-grid">
           <form className="marketing-contact-form" onSubmit={handleContactSubmit}>
@@ -543,7 +428,7 @@ export default function InstitutionalHome() {
       <footer className="marketing-footer">
         <div>
           <p className="marketing-eyebrow">RiseLab3D</p>
-          <p className="marketing-footer-copy">Impressoras 3D, filamentos, acessorios, produtos impressos e operacao tecnica com base em Santos/SP.</p>
+          <p className="marketing-footer-copy">Operacao tecnica de impressao 3D com base em Santos/SP, estoque local e showroom em desenvolvimento.</p>
         </div>
         <div>
           <span className="marketing-mini-label">Localizacao</span>
