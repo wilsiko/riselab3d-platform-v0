@@ -1,5 +1,10 @@
-import { useEffect } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import heroScene from '../assets/institutional-hero-scene.svg';
+import materialsScene from '../assets/institutional-materials-scene.svg';
+import showroomScene from '../assets/institutional-showroom-scene.svg';
+import api from '../api';
+import { Alert } from '../components/Alert';
 
 const highlights = [
   {
@@ -132,9 +137,29 @@ function ChartIcon() {
   );
 }
 
+function InstagramIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5" aria-hidden="true">
+      <rect x="3.5" y="3.5" width="17" height="17" rx="5" />
+      <circle cx="12" cy="12" r="4" />
+      <circle cx="17.2" cy="6.8" r="0.9" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 const sectionIcons = [BoxIcon, PrinterIcon, ToolIcon, LayersIcon, ChartIcon];
 
 export default function InstitutionalHome() {
+  const [contactForm, setContactForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    message: '',
+  });
+  const [contactError, setContactError] = useState('');
+  const [contactSuccess, setContactSuccess] = useState('');
+  const [isSubmittingContact, setIsSubmittingContact] = useState(false);
+
   useEffect(() => {
     document.title = 'RiseLab3D | Impressao 3D, filamentos e impressoras 3D em Santos e Baixada Santista';
 
@@ -151,12 +176,37 @@ export default function InstitutionalHome() {
     }
   }, []);
 
+  async function handleContactSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setContactError('');
+    setContactSuccess('');
+    setIsSubmittingContact(true);
+
+    try {
+      const response = await api.post('/contact', contactForm);
+      setContactSuccess(response.data?.message || 'Mensagem enviada com sucesso.');
+      setContactForm({
+        name: '',
+        email: '',
+        phone: '',
+        message: '',
+      });
+    } catch (error: any) {
+      setContactError(error?.response?.data?.error || 'Nao foi possivel enviar a mensagem agora. Tente novamente em instantes.');
+    } finally {
+      setIsSubmittingContact(false);
+    }
+  }
+
   return (
     <div className="marketing-shell">
       <section className="marketing-hero" id="topo">
         <div className="marketing-grid">
           <div className="marketing-hero-copy">
             <p className="marketing-eyebrow">Santos/SP • Estoque local • Suporte tecnico • Showroom em breve</p>
+            <div className="marketing-hero-inline-visual marketing-visual-card" aria-hidden="true">
+              <img src={heroScene} alt="" className="marketing-visual-image" />
+            </div>
             <h1 className="marketing-display">Impressao 3D sem complicacao.</h1>
             <p className="marketing-lead">
               Filamentos, impressoras 3D, acessorios e producao sob demanda com leitura tecnica, agilidade comercial e operacao local.
@@ -178,6 +228,9 @@ export default function InstitutionalHome() {
           </div>
 
           <div className="marketing-hero-stage" aria-hidden="true">
+            <div className="marketing-visual-card marketing-visual-card-hero marketing-hero-desktop-visual">
+              <img src={heroScene} alt="Ilustracao de impressora 3D, painel operacional e materiais da RiseLab3D" className="marketing-visual-image" />
+            </div>
             <div className="marketing-stage-panel marketing-stage-panel-primary">
               <p className="marketing-stage-label">Operacao local</p>
               <p className="marketing-stage-title">Loja tecnica para quem compra com criterio.</p>
@@ -226,21 +279,26 @@ export default function InstitutionalHome() {
             </p>
           </div>
           <div className="marketing-about-aside">
-            <div>
-              <span className="marketing-mini-label">Base</span>
-              <strong>Santos/SP</strong>
+            <div className="marketing-visual-card marketing-visual-card-light">
+              <img src={materialsScene} alt="Ilustracao de filamentos e materiais organizados para estoque local" className="marketing-visual-image" />
             </div>
-            <div>
-              <span className="marketing-mini-label">Foco</span>
-              <strong>Impressao 3D funcional e comercial</strong>
-            </div>
-            <div>
-              <span className="marketing-mini-label">Parceria</span>
-              <strong>Revenda oficial Bambu Lab</strong>
-            </div>
-            <div>
-              <span className="marketing-mini-label">Expansao</span>
-              <strong>Loja fisica e showroom interativo em breve</strong>
+            <div className="marketing-about-facts">
+              <div className="marketing-about-fact">
+                <span className="marketing-mini-label">Base</span>
+                <strong>Santos/SP</strong>
+              </div>
+              <div className="marketing-about-fact">
+                <span className="marketing-mini-label">Foco</span>
+                <strong>Impressao 3D funcional e comercial</strong>
+              </div>
+              <div className="marketing-about-fact">
+                <span className="marketing-mini-label">Parceria</span>
+                <strong>Revenda oficial Bambu Lab</strong>
+              </div>
+              <div className="marketing-about-fact">
+                <span className="marketing-mini-label">Expansao</span>
+                <strong>Loja fisica e showroom interativo em breve</strong>
+              </div>
             </div>
           </div>
         </div>
@@ -308,6 +366,7 @@ export default function InstitutionalHome() {
         </div>
         <div className="marketing-showroom-stage" aria-hidden="true">
           <div className="marketing-showroom-visual marketing-showroom-visual-large">
+            <img src={showroomScene} alt="Ilustracao de showroom tecnico com impressoras 3D e area de demonstracao" className="marketing-showroom-image" />
             <div className="marketing-showroom-overlay">
               <span className="marketing-mini-label">Base RiseLab3D</span>
               <strong>Showroom interativo com retirada, demonstracao e conversa tecnica no mesmo fluxo.</strong>
@@ -399,7 +458,89 @@ export default function InstitutionalHome() {
         </div>
       </section>
 
-      <footer className="marketing-footer" id="contato">
+      <section className="marketing-section" id="contato">
+        <div className="marketing-section-head marketing-section-head-inline">
+          <div>
+            <p className="marketing-eyebrow">Contato</p>
+            <h2>Fale com a RiseLab3D pelo site.</h2>
+          </div>
+          <p className="marketing-section-note">Envie sua necessidade comercial ou tecnica. O formulario encaminha a mensagem para contato@riselab3d.com.br.</p>
+        </div>
+        <div className="marketing-contact-grid">
+          <form className="marketing-contact-form" onSubmit={handleContactSubmit}>
+            <label className="marketing-field">
+              <span>Nome</span>
+              <input
+                type="text"
+                value={contactForm.name}
+                onChange={(event) => setContactForm((current) => ({ ...current, name: event.target.value }))}
+                placeholder="Seu nome"
+                required
+              />
+            </label>
+            <label className="marketing-field">
+              <span>E-mail</span>
+              <input
+                type="email"
+                value={contactForm.email}
+                onChange={(event) => setContactForm((current) => ({ ...current, email: event.target.value }))}
+                placeholder="voce@empresa.com"
+                required
+              />
+            </label>
+            <label className="marketing-field">
+              <span>Telefone</span>
+              <input
+                type="tel"
+                value={contactForm.phone}
+                onChange={(event) => setContactForm((current) => ({ ...current, phone: event.target.value }))}
+                placeholder="(13) 99999-9999"
+                required
+              />
+            </label>
+            <label className="marketing-field marketing-field-full">
+              <span>Mensagem</span>
+              <textarea
+                value={contactForm.message}
+                onChange={(event) => setContactForm((current) => ({ ...current, message: event.target.value }))}
+                placeholder="Descreva o que voce precisa: impressoras, filamentos, acessorios, projeto ou suporte."
+                rows={6}
+                required
+              />
+            </label>
+            {contactError ? <Alert type="error" message={contactError} onClose={() => setContactError('')} /> : null}
+            {contactSuccess ? <Alert type="success" message={contactSuccess} onClose={() => setContactSuccess('')} /> : null}
+            <button type="submit" className="marketing-button marketing-button-primary marketing-contact-submit" disabled={isSubmittingContact}>
+              {isSubmittingContact ? 'Enviando mensagem...' : 'Enviar contato'}
+            </button>
+          </form>
+
+          <div className="marketing-contact-aside">
+            <div>
+              <span className="marketing-mini-label">Destino</span>
+              <strong>contato@riselab3d.com.br</strong>
+            </div>
+            <div>
+              <span className="marketing-mini-label">Canal</span>
+              <strong>Atendimento comercial e tecnico pelo site institucional</strong>
+            </div>
+            <div>
+              <span className="marketing-mini-label">Cobertura</span>
+              <strong>Santos, Sao Vicente, Praia Grande, Guaruja e Baixada Santista</strong>
+            </div>
+            <div>
+              <span className="marketing-mini-label">Instagram</span>
+              <strong>
+                <a href="https://instagram.com/riselab3d" target="_blank" rel="noreferrer" className="marketing-social-link" aria-label="Instagram oficial da RiseLab3D">
+                  <InstagramIcon />
+                </a>
+              </strong>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <footer className="marketing-footer">
         <div>
           <p className="marketing-eyebrow">RiseLab3D</p>
           <p className="marketing-footer-copy">Impressoras 3D, filamentos, acessorios, produtos impressos e operacao tecnica com base em Santos/SP.</p>
@@ -407,16 +548,6 @@ export default function InstitutionalHome() {
         <div>
           <span className="marketing-mini-label">Localizacao</span>
           <strong>Santos/SP</strong>
-        </div>
-        <div>
-          <span className="marketing-mini-label">Contato</span>
-          <strong>contato@riselab3d.com.br</strong>
-        </div>
-        <div>
-          <span className="marketing-mini-label">Redes</span>
-          <strong>
-            <a href="https://instagram.com/riselab3d" target="_blank" rel="noreferrer" className="marketing-footer-link">Instagram @riselab3d</a>
-          </strong>
         </div>
         <p className="marketing-copyright">© 2026 RiseLab3D. Todos os direitos reservados.</p>
       </footer>

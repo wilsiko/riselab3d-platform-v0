@@ -12,6 +12,7 @@ import productsRouter from './routes/products';
 import quotesRouter from './routes/quotes';
 import dashboardRouter from './routes/dashboard';
 import clientsRouter from './routes/clients';
+import contactRouter from './routes/contact';
 
 dotenv.config();
 
@@ -30,6 +31,7 @@ app.use('/api/settings', settingsRouter);
 app.use('/api/products', productsRouter);
 app.use('/api/clients', clientsRouter);
 app.use('/api/quotes', quotesRouter);
+app.use('/api/contact', contactRouter);
 
 app.get('/api/health', (_, res) => res.json({ status: 'ok' }));
 

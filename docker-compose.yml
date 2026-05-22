@@ -24,7 +24,7 @@ services:
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
-      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-RiseLab3D <onboarding@resend.dev>}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-RiseLab3D <formulario_site@riselab3d.com.br>}
     depends_on:
       - db
     volumes:

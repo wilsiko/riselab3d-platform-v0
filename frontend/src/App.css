@@ -180,7 +180,8 @@
 .marketing-nav a,
 .marketing-inline-action,
 .marketing-inline-ghost,
-.marketing-footer-link {
+.marketing-footer-link,
+.marketing-social-link {
   color: var(--marketing-ink);
   text-decoration: none;
 }
@@ -194,7 +195,8 @@
 .marketing-inline-action:hover,
 .marketing-inline-ghost:hover,
 .marketing-card-link:hover,
-.marketing-footer-link:hover {
+.marketing-footer-link:hover,
+.marketing-social-link:hover {
   color: var(--marketing-ink);
 }
 
@@ -232,6 +234,10 @@
 .marketing-showroom,
 .marketing-platform {
   grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.9fr);
+}
+
+.marketing-grid {
+  align-items: start;
 }
 
 .marketing-hero {
@@ -354,6 +360,7 @@
 .marketing-hero-stage {
   display: grid;
   gap: 1rem;
+  align-content: start;
 }
 
 .marketing-stage-panel,
@@ -367,8 +374,39 @@
   padding: 1.35rem;
 }
 
+.marketing-visual-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 1.9rem;
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.05);
+}
+
+.marketing-visual-card-hero {
+  min-height: 14rem;
+}
+
+.marketing-hero-inline-visual {
+  display: none;
+  margin-top: 1.35rem;
+  min-height: 12rem;
+}
+
+.marketing-visual-card-light {
+  padding: 0;
+}
+
+.marketing-visual-image,
+.marketing-showroom-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .marketing-stage-panel-primary {
-  min-height: 16rem;
+  min-height: auto;
   background: linear-gradient(135deg, rgba(15, 23, 42, 1), rgba(31, 41, 55, 0.92));
 }
 
@@ -384,11 +422,11 @@
 .marketing-stage-grid {
   display: grid;
   gap: 1rem;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .marketing-stage-outline {
-  grid-column: span 2;
+  grid-column: auto;
   background: rgba(255, 255, 255, 0.68);
 }
 
@@ -483,13 +521,16 @@
 }
 
 .marketing-about-grid {
-  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.8fr);
+  grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.95fr);
   margin-top: 2rem;
+  align-items: start;
 }
 
 .marketing-about-copy {
   display: grid;
   gap: 1.25rem;
+  align-content: start;
+  max-width: 60ch;
 }
 
 .marketing-about-copy p,
@@ -504,6 +545,110 @@
   display: grid;
   gap: 1rem;
   align-content: start;
+}
+
+.marketing-about-aside .marketing-visual-card-light {
+  min-height: 18rem;
+}
+
+.marketing-about-facts {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.marketing-about-fact {
+  min-height: 8.5rem;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 1.25rem;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.marketing-contact-grid {
+  grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr);
+}
+
+.marketing-contact-form,
+.marketing-contact-aside {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 1.9rem;
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.05);
+}
+
+.marketing-contact-form {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 1.35rem;
+}
+
+.marketing-contact-aside {
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+  padding: 1.35rem;
+}
+
+.marketing-field {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.marketing-field span {
+  color: var(--marketing-ink);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.marketing-field input,
+.marketing-field textarea {
+  width: 100%;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.96);
+  padding: 0.95rem 1rem;
+  color: var(--marketing-ink);
+  font: inherit;
+}
+
+.marketing-field textarea {
+  resize: vertical;
+  min-height: 9rem;
+}
+
+.marketing-field-full,
+.marketing-contact-submit,
+.marketing-contact-form .rounded-2xl {
+  grid-column: 1 / -1;
+}
+
+.marketing-contact-submit {
+  border: 0;
+  cursor: pointer;
+}
+
+.marketing-contact-submit:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.marketing-social-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.8rem;
+  height: 2.8rem;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.marketing-social-link:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 26px rgba(15, 23, 42, 0.08);
 }
 
 .marketing-about-aside strong,
@@ -526,7 +671,8 @@
 }
 
 .marketing-card-grid,
-.marketing-differentials-grid {
+.marketing-differentials-grid,
+.marketing-contact-grid {
   display: grid;
   gap: 1rem;
   margin-top: 2rem;
@@ -648,6 +794,11 @@
 
 .marketing-showroom-visual-large {
   min-height: 18rem;
+}
+
+.marketing-showroom-image {
+  position: absolute;
+  inset: 0;
 }
 
 .marketing-showroom-overlay {
@@ -798,7 +949,7 @@
 
 .marketing-footer {
   display: grid;
-  grid-template-columns: 1.4fr repeat(4, minmax(0, 1fr));
+  grid-template-columns: 1.4fr repeat(2, minmax(0, 1fr));
   gap: 1.1rem;
   margin: 3rem 0 2rem;
 }
@@ -817,10 +968,10 @@
 }
 
 @media (max-width: 1180px) {
-  .marketing-grid,
   .marketing-showroom,
   .marketing-platform,
   .marketing-about-grid,
+  .marketing-contact-grid,
   .marketing-footer {
     grid-template-columns: 1fr;
   }
@@ -834,10 +985,43 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .marketing-section-head-inline,
-  .marketing-topbar {
+  .marketing-section-head-inline {
     align-items: flex-start;
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 1100px) {
+  .marketing-topbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 1rem 1.25rem;
+  }
+
+  .marketing-brand {
+    grid-column: 1 / -1;
+  }
+
+  .marketing-nav {
+    justify-content: flex-start;
+  }
+
+  .marketing-topbar-actions {
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 980px) {
+  .marketing-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .marketing-hero-inline-visual {
+    display: block;
+  }
+
+  .marketing-hero-desktop-visual {
+    display: none;
   }
 }
 
@@ -847,6 +1031,8 @@
   }
 
   .marketing-topbar {
+    grid-template-columns: 1fr;
+    align-items: flex-start;
     gap: 1rem;
     padding: 1rem;
     border-radius: 1.4rem;
@@ -893,12 +1079,17 @@
   .marketing-card-grid,
   .marketing-differentials-grid,
   .marketing-local-search-grid,
+  .marketing-contact-form,
   .marketing-showroom-grid {
     grid-template-columns: 1fr;
   }
 
   .marketing-stage-outline {
     grid-column: auto;
+  }
+
+  .marketing-about-facts {
+    grid-template-columns: 1fr;
   }
 
   .marketing-card,
