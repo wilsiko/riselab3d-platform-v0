@@ -1,10 +1,17 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  color-scheme: dark;
-  font-family: 'Space Grotesk', 'Avenir Next', 'Segoe UI', sans-serif;
+  color-scheme: light;
+  font-family: 'Inter', 'Avenir Next', 'Segoe UI', sans-serif;
+  --marketing-bg: #f3f4f6;
+  --marketing-surface: rgba(255, 255, 255, 0.84);
+  --marketing-ink: #111827;
+  --marketing-muted: #4b5563;
+  --marketing-accent: #c2410c;
 }
 
 html {
@@ -13,8 +20,8 @@ html {
 
 body {
   @apply antialiased;
-  background: #050816;
-  color: #f8fafc;
+  background: #f3f4f6;
+  color: #111827;
 }
 
 #root {
