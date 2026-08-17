@@ -12,6 +12,6 @@ export default defineConfig({
     },
   },
   preview: {
-    allowedHosts: ['.railway.app', 'localhost', 'riselab3d.com.br', 'www.riselab3d.com.br'],
+    allowedHosts: ['.railway.app', 'localhost', 'riselab3d.com.br', 'www.riselab3d.com.br', 'app.riselab3d.com.br'],
   },
 });
