@@ -57,6 +57,17 @@ Backend:
 Frontend:
 - `VITE_GOOGLE_CLIENT_ID`: mesmo client id do Google usado pelo backend.
 - `VITE_PUBLIC_TENANT_ID`: tenant publico para navegacao anônima. Default `tenant_1`.
+- `VITE_API_BASE_URL`: URL base da API. Em deploy com um único domínio, use `/api` para chamar o backend no mesmo host: `https://app.riselab3d.com.br` -> `/api`.
+
+### Deploy com domínio único
+```bash
+# Frontend / app.riselab3d.com.br
+VITE_API_BASE_URL=/api
+
+# Backend / app.riselab3d.com.br/api
+APP_BASE_URL=https://app.riselab3d.com.br
+FRONTEND_URL=https://app.riselab3d.com.br/login
+```
 
 ### Usando npm
 
