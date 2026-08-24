@@ -14,14 +14,12 @@ import PasswordResetRequired from './pages/PasswordResetRequired';
 
 const platformPrimaryNav = [
   { label: 'Cotacoes', path: '/quotes' },
-  { label: 'Catalogo', path: '/catalog' },
 ];
 
 const platformMobileNav = [
   { label: 'Cotacoes', path: '/quotes' },
-  { label: 'Catalogo', path: '/catalog' },
   { label: 'Config', path: '/pricing' },
-  { label: 'Site', path: '/' },
+  { label: 'Site', path: '/site' },
 ];
 
 function SunIcon() {
@@ -66,7 +64,7 @@ function App() {
   const { user, isAuthenticated, logout } = useAuth();
   const [isPlatformMenuOpen, setIsPlatformMenuOpen] = useState(false);
   const requiresPasswordChange = isAuthenticated && Boolean(user?.mustChangePassword);
-  const isMarketingRoute = location.pathname === '/';
+  const isMarketingRoute = location.pathname === '/site';
 
   useEffect(() => {
     setIsPlatformMenuOpen(false);
@@ -110,7 +108,7 @@ function App() {
 
           <main>
             <Routes>
-              <Route path="/" element={<InstitutionalHome />} />
+              <Route path="/site" element={<InstitutionalHome />} />
             </Routes>
           </main>
         </div>
@@ -123,8 +121,8 @@ function App() {
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.16),transparent_30%),radial-gradient(circle_at_85%_15%,rgba(45,212,191,0.14),transparent_24%),linear-gradient(180deg,rgba(5,8,22,1),rgba(9,14,31,1))]" />
       <div className="pointer-events-none absolute inset-x-0 top-0 h-28 border-b border-white/6 bg-white/[0.02] backdrop-blur-2xl" />
 
-      <div className="relative mx-auto flex min-h-screen max-w-[1600px] flex-col px-4 pb-28 pt-4 sm:px-6 lg:px-10 lg:pb-10">
-        <header className="sticky top-4 z-20 rounded-[28px] border border-white/10 bg-white/5 px-4 py-4 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-2xl sm:px-5">
+      <div className="relative mx-auto flex min-h-screen max-w-[1600px] flex-col px-4 pb-10 pt-4 sm:px-6 lg:px-10 lg:pb-10">
+        <header className="relative z-20 rounded-[22px] border border-white/10 bg-white/5 px-4 py-4 shadow-[0_10px_30px_rgba(0,0,0,0.25)] backdrop-blur-2xl sm:px-5">
           <div className="flex items-center justify-between gap-3 lg:hidden">
             <Link to="/" className="min-w-0 flex-1">
               <div className="flex items-center gap-3">
@@ -241,9 +239,6 @@ function App() {
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
-              <Link to="/" className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-white/[0.08] hover:text-white">
-                Site institucional
-              </Link>
               <div className="rounded-2xl border border-white/10 bg-[#0a1228]/70 px-4 py-2.5 text-sm text-slate-300">
                 {isAuthenticated ? (
                   <div className="flex items-center gap-3">
@@ -271,13 +266,13 @@ function App() {
           </div>
         </header>
 
-        <nav className="fixed inset-x-4 bottom-4 z-20 grid grid-cols-4 gap-2 rounded-[24px] border border-white/10 bg-[#091126]/95 p-2 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-2xl lg:hidden" aria-label="Atalhos da plataforma no mobile">
+        <nav className="mt-4 grid grid-cols-3 gap-2 rounded-[20px] border border-white/10 bg-[#091126]/90 p-2 shadow-[0_12px_30px_rgba(0,0,0,0.25)] backdrop-blur-2xl lg:hidden" aria-label="Atalhos da plataforma no mobile">
           {platformMobileNav.map((item) => (
             <NavLink
               key={item.path}
               to={item.path}
               className={({ isActive }) =>
-                `rounded-2xl px-2 py-3 text-center text-[11px] font-semibold uppercase tracking-[0.14em] transition ${
+                `rounded-xl px-2 py-2.5 text-center text-[10px] font-semibold uppercase tracking-[0.12em] transition ${
                   isActive ? 'brand-primary-active' : 'text-slate-300 hover:bg-white/[0.08] hover:text-white'
                 }`
               }
@@ -290,6 +285,7 @@ function App() {
         <main className="relative mt-5 flex-1">
           <div className="rounded-[36px] border border-white/10 bg-white/[0.035] p-3 shadow-[0_30px_100px_rgba(0,0,0,0.24)] backdrop-blur-2xl sm:p-5 lg:p-6">
             <Routes>
+              <Route path="/" element={<Navigate to="/quotes" replace />} />
               <Route path="/login" element={<Login />} />
               <Route path="/password-reset-required" element={isAuthenticated ? <PasswordResetRequired /> : <Navigate to="/login" replace />} />
               <Route path="/quotes" element={requiresPasswordChange ? <Navigate to="/password-reset-required" replace /> : <Quotes />} />
@@ -302,7 +298,8 @@ function App() {
               <Route path="/products" element={<Navigate to="/catalog/products" replace />} />
               <Route path="/filaments" element={<Navigate to="/catalog/products" replace />} />
               <Route path="/printers" element={<Navigate to="/catalog/printers" replace />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
+              <Route path="/site" element={<InstitutionalHome />} />
+              <Route path="*" element={<Navigate to="/quotes" replace />} />
             </Routes>
           </div>
         </main>
